@@ -175,7 +175,7 @@ def render_student_survey(survey_id):
 
         else:
             st.info("먼저 본인의 이름을 선택해주세요.")
-        st.write("학생 설문 페이지 내용 (구현 필요)") # 임시 Placeholder
+        # st.write("학생 설문 페이지 내용 (구현 필요)") # 임시 Placeholder
 
 # --- !!! 메인 교사 페이지 렌더링 함수 !!! ---
 def render_home_page():
