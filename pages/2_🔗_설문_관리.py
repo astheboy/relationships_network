@@ -185,18 +185,25 @@ if selected_class_id:
             if selected_survey_name_for_link:
                 selected_survey_id_for_link = link_survey_options[selected_survey_name_for_link]
 
-                # --- !!! URL 생성 부분 - 배포 시 주의 !!! ---
-                # 배포된 앱의 실제 URL을 반영하도록 수정 필요
-                # 예시 1: 환경 변수 사용 (Streamlit Cloud Secrets 등)
-                # app_base_url = st.secrets.get("APP_BASE_URL", "http://localhost:8501")
-                # 예시 2: 하드코딩 (배포 후 실제 주소로 변경)
-                app_base_url = "http://localhost:8501" # <<-- 배포 시 실제 앱 주소로 변경 필요!
-                # -------------------------------------------
+                # --- !!! URL 생성 부분 수정 !!! ---
+                # Secrets에서 배포된 앱의 기본 URL 읽기 시도, 없으면 로컬 주소 사용
+                try:
+                    # secrets.toml 에 [app] base_url = "YOUR_DEPLOYED_URL" 설정 필요
+                    app_base_url = st.secrets.get("app", {}).get("base_url", "http://localhost:8501").strip()
+                    # URL 유효성 기본 체크 (http로 시작하는지)
+                    if not app_base_url or not app_base_url.startswith("http"):
+                        app_base_url = "http://localhost:8501" # 잘못된 경우 로컬로 대체
+                        st.warning("Streamlit Secrets에 유효한 [app] base_url이 설정되지 않았습니다. 로컬 주소로 링크를 생성합니다.")
+                except Exception as e:
+                    app_base_url = "http://localhost:8501" # secrets 접근 오류 시 로컬로 대체
+                    st.warning(f"Streamlit Secrets 읽기 오류 ({e}). 로컬 주소로 링크를 생성합니다.")
+
+                st.write(f"DEBUG: 사용될 Base URL: {app_base_url}") # 디버깅용
 
                 # URL 파라미터 생성 (survey_id 만 사용)
                 query_params = urlencode({'survey_id': selected_survey_id_for_link})
-                survey_url = f"{app_base_url}/?{query_params}" # Home.py에서 처리하므로 /survey_student 경로 불필요
-
+                # Home.py에서 조건부 렌더링하므로 앱 기본 URL + 파라미터 형태
+                survey_url = f"{app_base_url}/?{query_params}"
                 st.write(f"**'{selected_survey_name_for_link}' 설문 링크:**")
                 st.code(survey_url)
                 st.caption("링크를 복사하거나 아래 QR 코드를 학생들에게 보여주세요.")
