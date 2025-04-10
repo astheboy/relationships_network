@@ -34,112 +34,43 @@ if 'teacher_name' not in st.session_state: st.session_state['teacher_name'] = No
 
 # --- !!! 학생 설문 페이지 렌더링 함수 !!! ---
 def render_student_survey(survey_id):
-    # --- Supabase 클라이언트 가져오기 ---
-    @st.cache_resource
-    def init_connection():
-        try:
-            url = st.secrets["supabase"]["url"]
-            key = st.secrets["supabase"]["key"]
-            return create_client(url, key)
-        except Exception as e:
-            # 학생 페이지에서는 오류를 간결하게 표시
-            print(f"Supabase 연결 오류: {e}")
-            return None
+    # st.set_page_config 호출 제거! (이미 위에서 호출함)
+    st.info(f"DEBUG: 설문 페이지 렌더링 시작 (survey_id: {survey_id})")
 
-    from supabase import create_client
-    supabase = init_connection()
-
-    # --- URL 파라미터에서 설문 ID 가져오기 ---
-    query_params = st.query_params
-    # --- !!! 디버깅: 전체 쿼리 파라미터 확인 !!! ---
-    st.write(f"DEBUG: 전체 query_params: {query_params}") # 전체 내용을 확인
-    # .get()을 사용하되, 키가 없을 경우 기본값으로 빈 리스트를 주고,
-    # 키가 있을 경우 반환된 리스트의 첫 번째 요소를 가져옵니다.
-    # survey_id_list = query_params.get("survey_id", [])
-    # survey_id = survey_id_list[0] if survey_id_list else None
-
-    # # --- !!! 디버깅: survey_id 값 확인 !!! ---
-    # st.write(f"DEBUG: URL에서 가져온 survey_id: {survey_id}")
-
-    # # --- !!! 디버깅: Supabase 연결 확인 !!! ---
-    # st.write(f"DEBUG: Supabase 연결 상태: {'성공' if supabase else '실패'}")
-    # --- !!! 수정된 ID 추출 로직 !!! ---
-    # .get()으로 값을 가져오고 타입을 확인하여 처리
-    retrieved_value = query_params.get("survey_id") # 기본값 없이 가져오기 시도
-    st.write(f"DEBUG: query_params.get('survey_id') 결과: {retrieved_value}")
-    st.write(f"DEBUG: 결과 타입: {type(retrieved_value)}")
-    # st.write(f"DEBUG: 가져온 survey_id_list: {survey_id_list}") # 리스트 내용 확인
-    # st.write(f"DEBUG: survey_id_list 타입: {type(survey_id_list)}") # 타입 확인
-
-    final_survey_id = None
-    if isinstance(retrieved_value, list) and retrieved_value:
-        # 만약 리스트로 반환되는 경우 (예상했던 동작)
-        final_survey_id = retrieved_value[0]
-        st.write(f"DEBUG: 처리 방식: 리스트에서 ID 추출 ({final_survey_id})")
-    elif isinstance(retrieved_value, str) and retrieved_value.strip():
-        # 문자열로 직접 반환되는 경우 (현재 확인된 동작)
-        final_survey_id = retrieved_value.strip() # 양 끝 공백 제거
-        st.write(f"DEBUG: 처리 방식: 문자열에서 직접 ID 할당 ({final_survey_id})")
-    else:
-        # 그 외 경우 (None, 빈 문자열, 빈 리스트 등)
-        st.write(f"DEBUG: 처리 방식: 유효한 survey_id 파라미터 없음 (값: {retrieved_value})")
-        final_survey_id = None
-
-    # --- !!! 디버깅: 최종 survey_id 값 확인 !!! ---
-    st.write(f"DEBUG: 최종 할당된 final_survey_id: {final_survey_id}")
-    st.write(f"DEBUG: final_survey_id 타입: {type(final_survey_id)}")
-
-
-    # --- 데이터 로드 함수 (디버깅 추가) ---
-    # @st.cache_data(ttl=600)
+    # --- 데이터 로드 함수 (이전에 pages/_survey_student.py에 있던 내용) ---
+    # @st.cache_data(ttl=600) # 캐싱은 필요시 다시 활성화
     def load_survey_data(_survey_id):
-        st.write(f"DEBUG: load_survey_data 호출됨 (ID: {_survey_id}, 타입: {type(_survey_id)})") # 타입 확인 추가
-        # if not supabase or not _survey_id: # UUID는 문자열이므로 이 조건 유효
-        # UUID 형식인지 더 엄격하게 체크하려면 정규식 등 사용 가능
-        if not supabase or not isinstance(_survey_id, str) or len(_survey_id) < 30: # 간단히 문자열이고 길이가 충분한지 확인
+        st.write(f"DEBUG: load_survey_data 호출됨 (ID: {_survey_id}, 타입: {type(_survey_id)})")
+        if not supabase or not isinstance(_survey_id, str) or len(_survey_id) < 30:
             st.write(f"DEBUG: Supabase 연결 실패 또는 유효하지 않은 survey_id ({_survey_id})")
-            return None, None, None
-
+            return None, "DB 연결 또는 survey_id 오류", None
         try:
-            # 1. 설문 정보 조회
-            st.write(f"DEBUG: surveys 테이블 조회 시도 (ID: {_survey_id})")
-            survey_response = supabase.table('surveys') \
-                .select("survey_instance_id, survey_name, description, class_id") \
-                .eq('survey_instance_id', _survey_id) \
-                .single() \
-                .execute()
-            if not survey_response.data: return None, "설문 정보를 찾을 수 없습니다.", None
+            # ... (기존 load_survey_data 함수 로직 전체) ...
+            # 예시:
+            survey_response = supabase.table('surveys').select("...").eq('survey_instance_id', _survey_id).single().execute()
+            if not survey_response.data: return None, "설문 정보 없음", None
             survey_info = survey_response.data
             class_id = survey_info.get('class_id')
-            if not class_id: return survey_info, "설문에 연결된 학급 정보를 찾을 수 없습니다.", None
+            if not class_id: return survey_info, "학급 정보 없음", None
             student_response = supabase.table('students').select("...").eq('class_id', class_id).execute()
-            if not student_response.data: return survey_info, "학급의 학생 명단을 찾을 수 없습니다.", None
+            if not student_response.data: return survey_info, "학생 명단 없음", None
             students_df = pd.DataFrame(student_response.data)
-            st.write("DEBUG: 데이터 로드 성공")
             return survey_info, None, students_df
         except Exception as e:
-            st.write(f"DEBUG: 데이터 로딩 중 예외 발생: {e}")
-            return None, f"데이터 로딩 중 오류 발생: {e}", None
+             st.write(f"DEBUG: 데이터 로딩 중 예외 발생: {e}")
+             return None, f"데이터 로딩 중 오류 발생: {e}", None
 
     # --- 설문 데이터 로드 ---
-    survey_info, error_msg, students_df = load_survey_data(final_survey_id)
+    survey_info, error_msg, students_df = load_survey_data(survey_id)
 
-    # --- 오류 처리 또는 설문 진행 (기존 코드 유지) ---
     if error_msg:
         st.error(error_msg)
-    elif not survey_info or students_df is None: # 이 조건이 왜 참이 되는지 디버깅 필요
+    elif not survey_info or students_df is None:
         st.error("설문 정보를 불러올 수 없습니다. URL을 확인하거나 관리자에게 문의하세요.")
-        # 디버깅 정보 추가
-        st.write("--- 추가 디버깅 정보 ---")
-        st.write(f"load_survey_data 반환값:")
-        st.write(f"survey_info: {survey_info}")
-        st.write(f"error_msg: {error_msg}")
-        st.write(f"students_df is None: {students_df is None}")
-        if students_df is not None:
-            st.write(f"students_df 내용 (처음 5행):")
-            st.dataframe(students_df.head())
     else:
-        # --- 설문 진행 코드 (기존 코드 유지) ---
+        # --- !!! 여기에 pages/_survey_student.py의 UI 및 제출 로직 전체 삽입 !!! ---
+
+    # --- 설문 진행 코드 (기존 코드 유지) ---
         st.title(f"📝 {survey_info.get('survey_name', '교우관계 설문')}")
         if survey_info.get('description'):
             st.markdown(survey_info['description'])
@@ -230,45 +161,6 @@ def render_student_survey(survey_id):
 
         else:
             st.info("먼저 본인의 이름을 선택해주세요.")
-    # st.set_page_config 호출 제거! (이미 위에서 호출함)
-    st.info(f"DEBUG: 설문 페이지 렌더링 시작 (survey_id: {survey_id})")
-
-    # --- 데이터 로드 함수 (이전에 pages/_survey_student.py에 있던 내용) ---
-    # @st.cache_data(ttl=600) # 캐싱은 필요시 다시 활성화
-    def load_survey_data(_survey_id):
-        st.write(f"DEBUG: load_survey_data 호출됨 (ID: {_survey_id}, 타입: {type(_survey_id)})")
-        if not supabase or not isinstance(_survey_id, str) or len(_survey_id) < 30:
-            st.write(f"DEBUG: Supabase 연결 실패 또는 유효하지 않은 survey_id ({_survey_id})")
-            return None, "DB 연결 또는 survey_id 오류", None
-        try:
-            # ... (기존 load_survey_data 함수 로직 전체) ...
-            # 예시:
-            survey_response = supabase.table('surveys').select("...").eq('survey_instance_id', _survey_id).single().execute()
-            if not survey_response.data: return None, "설문 정보 없음", None
-            survey_info = survey_response.data
-            class_id = survey_info.get('class_id')
-            if not class_id: return survey_info, "학급 정보 없음", None
-            student_response = supabase.table('students').select("...").eq('class_id', class_id).execute()
-            if not student_response.data: return survey_info, "학생 명단 없음", None
-            students_df = pd.DataFrame(student_response.data)
-            return survey_info, None, students_df
-        except Exception as e:
-             st.write(f"DEBUG: 데이터 로딩 중 예외 발생: {e}")
-             return None, f"데이터 로딩 중 오류 발생: {e}", None
-
-    # --- 설문 데이터 로드 ---
-    survey_info, error_msg, students_df = load_survey_data(survey_id)
-
-    if error_msg:
-        st.error(error_msg)
-    elif not survey_info or students_df is None:
-        st.error("설문 정보를 불러올 수 없습니다. URL을 확인하거나 관리자에게 문의하세요.")
-    else:
-        # --- !!! 여기에 pages/_survey_student.py의 UI 및 제출 로직 전체 삽입 !!! ---
-        st.title(f"📝 {survey_info.get('survey_name', '교우관계 설문')}")
-        # ... (학생 이름 선택 selectbox) ...
-        # ... (관계 매핑 슬라이더 로직) ...
-        # ... (추가 질문 form 및 제출 로직) ...
         st.write("학생 설문 페이지 내용 (구현 필요)") # 임시 Placeholder
 
 # --- !!! 메인 교사 페이지 렌더링 함수 !!! ---
