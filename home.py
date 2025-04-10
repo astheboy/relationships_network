@@ -245,7 +245,23 @@ def render_home_page():
     else:
         # --- 로그인 후 환영 메시지 및 로그아웃 버튼 ---
         st.subheader(f"{st.session_state['teacher_name']} 선생님, 안녕하세요!")
-        # ... (기존 환영 메시지 코드) ...
+        st.write("왼쪽 사이드바 메뉴를 통해 학급 관리, 설문 관리, 분석 대시보드 등의 기능을 이용할 수 있습니다.")
+
+        # --- !!! 관리자일 경우 관리자 페이지 링크 표시 !!! ---
+        is_admin_session = False # 세션 상태에도 관리자 여부 저장 고려 가능
+        try:
+            # DB에서 현재 사용자의 관리자 상태 확인 (매번 확인할 수도 있고, 로그인 시 세션에 저장할 수도 있음)
+            admin_check_res = supabase.table("teachers").select("is_admin").eq("teacher_id", st.session_state['teacher_id']).single().execute()
+            if admin_check_res.data and admin_check_res.data.get('is_admin'):
+                is_admin_session = True
+                # st.session_state['is_admin'] = True # 로그인 시 세션에 저장하는 경우
+        except Exception as e:
+            print(f"관리자 상태 확인 오류: {e}") # 오류는 로깅만
+
+        if is_admin_session:
+            st.page_link("pages/_9_👑_관리자_페이지.py", label="👑 관리자 대시보드 가기", icon="👑")
+            st.caption("관리자 전용 메뉴입니다.")
+        # ----------------------------------------------------
         if st.button("로그아웃"):
             logout() # logout 호출
 
