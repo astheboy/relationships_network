@@ -35,12 +35,12 @@ if 'teacher_name' not in st.session_state: st.session_state['teacher_name'] = No
 # --- !!! 학생 설문 페이지 렌더링 함수 !!! ---
 def render_student_survey(survey_id):
     # st.set_page_config 호출 제거! (이미 위에서 호출함)
-    st.info(f"DEBUG: 설문 페이지 렌더링 시작 (survey_id: {survey_id})")
+    # st.info(f"DEBUG: 설문 페이지 렌더링 시작 (survey_id: {survey_id})")
 
     # --- 데이터 로드 함수 (이전에 pages/_survey_student.py에 있던 내용) ---
     # @st.cache_data(ttl=600) # 캐싱은 필요시 다시 활성화
     def load_survey_data(_survey_id):
-        st.write(f"DEBUG: load_survey_data 호출됨 (ID: {_survey_id}, 타입: {type(_survey_id)})")
+        # st.write(f"DEBUG: load_survey_data 호출됨 (ID: {_survey_id}, 타입: {type(_survey_id)})")
         if not supabase or not isinstance(_survey_id, str) or len(_survey_id) < 30:
             st.write(f"DEBUG: Supabase 연결 실패 또는 유효하지 않은 survey_id ({_survey_id})")
             return None, "DB 연결 또는 survey_id 오류", None
@@ -57,7 +57,7 @@ def render_student_survey(survey_id):
             students_df = pd.DataFrame(student_response.data)
             return survey_info, None, students_df
         except Exception as e:
-             st.write(f"DEBUG: 데이터 로딩 중 예외 발생: {e}")
+            #  st.write(f"DEBUG: 데이터 로딩 중 예외 발생: {e}")
              return None, f"데이터 로딩 중 오류 발생: {e}", None
 
     # --- 설문 데이터 로드 ---
@@ -122,8 +122,15 @@ def render_student_survey(survey_id):
             st.subheader("3. 추가 질문")
             with st.form("survey_form"):
                 # ... (기존 추가 질문 입력 필드들) ...
-                praise_friend = st.text_input("우리 반에서 칭찬하고 싶은 친구는? (없으면 비워두세요)")
-                # ... (나머지 필드들) ...
+                praise_friend = st.text_input("우리 반에서 칭찬하고 싶은(친해지고 싶은) 친구는? (없으면 비워두세요)")
+                praise_reason = st.text_input("우리 반에서 칭찬하고 싶은(친해지고 싶은) 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+                difficult_friend = st.text_input("우리 반에서 대하기 어려운 친구는? (없으면 비워두세요)")
+                difficult_reason = st.text_input("우리 반에서 대하기 어려운 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+                otherclass_friendly_name = st.text_input("다른 반에서 요즘 친한 친구는? (없으면 비워두세요)")
+                otherclass_friendly_reason = st.text_input("다른 반에서 친한 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+                otherclass_bad_name = st.text_input("다른 반에서 요즘 대하기 어려운 친구는? (없으면 비워두세요)")
+                otherclass_bad_reason = st.text_input("다른 반에서 대하기 어려운 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+                concern = st.text_area("요즘 학급이나 학교에서 어렵거나 힘든 점이 있다면 적어주세요.")
                 teacher_message = st.text_area("그 외 선생님께 하고 싶은 말을 자유롭게 적어주세요.")
 
                 submitted = st.form_submit_button("설문 제출하기")
@@ -141,7 +148,14 @@ def render_student_survey(survey_id):
                             'student_id': my_student_id,
                             'relation_mapping_data': relation_mapping_json, # 슬라이더 점수 저장
                             'praise_friend': praise_friend,
-                            # ... (나머지 데이터) ...
+                            'praise_reason': praise_reason,
+                            'difficult_friend': difficult_friend,
+                            'difficult_reason': difficult_reason,
+                            'otherclass_friendly_name': otherclass_friendly_name,
+                            'otherclass_friendly_reason': otherclass_friendly_reason,
+                            'otherclass_bad_name': otherclass_bad_name,
+                            'otherclass_bad_reason': otherclass_bad_reason,
+                            'concern': concern,
                             'teacher_message': teacher_message,
                         }
 
@@ -169,16 +183,65 @@ def render_home_page():
     st.title("🏠 교우관계 분석 시스템")
 
     if not st.session_state['logged_in']:
+        login_tab, signup_tab = st.tabs(["로그인", "회원가입"])
         # --- 로그인 폼 ---
-        st.subheader("로그인")
-        with st.form("login_form"):
-            # ... (기존 로그인 폼 코드) ...
-            username = st.text_input("사용자 이름 (아이디)")
-            password = st.text_input("비밀번호", type="password")
-            submitted = st.form_submit_button("로그인")
-            if submitted:
-                 check_login(username, password) # check_login 호출
-        st.info("관리자에게 계정 생성을 요청하세요.")
+        with login_tab:
+            st.subheader("로그인")
+            with st.form("login_form"):
+                # ... (기존 로그인 폼 코드) ...
+                username = st.text_input("사용자 이름 (아이디)")
+                password = st.text_input("비밀번호", type="password")
+                submitted = st.form_submit_button("로그인")
+                if submitted:
+                    check_login(username, password) # check_login 호출
+            st.info("관리자에게 계정 생성을 요청하세요.")
+        with signup_tab:
+            st.subheader("회원가입")
+            with st.form("signup_form", clear_on_submit=True):
+                new_username = st.text_input("사용자 이름 (아이디)", key="signup_user")
+                new_teacher_name = st.text_input("교사 이름", key="signup_name")
+                new_password = st.text_input("비밀번호", type="password", key="signup_pw1")
+                new_password_confirm = st.text_input("비밀번호 확인", type="password", key="signup_pw2")
+                # new_email = st.text_input("이메일 (선택 사항)", key="signup_email") # 이메일 필드 추가시
+
+                signup_submitted = st.form_submit_button("가입하기")
+
+                if signup_submitted:
+                    if not all([new_username, new_teacher_name, new_password, new_password_confirm]):
+                        st.warning("모든 필수 항목을 입력해주세요.")
+                    elif new_password != new_password_confirm:
+                        st.error("비밀번호가 일치하지 않습니다.")
+                    else:
+                        # --- 여기에 사용자 이름/이메일 중복 확인 로직 추가 ---
+                        # 예: check_username_exists(new_username) 함수 호출
+                        username_exists = False # 임시
+                        try:
+                            res = supabase.table("teachers").select("username").eq("username", new_username).execute()
+                            if res.data:
+                                username_exists = True
+                        except Exception as e:
+                            st.error(f"사용자 이름 확인 중 오류: {e}")
+                            st.stop() # 오류 시 중단
+
+                        if username_exists:
+                            st.error("이미 사용 중인 사용자 이름입니다.")
+                        else:
+                            # --- 여기에 비밀번호 해싱 및 Supabase insert 로직 추가 ---
+                            try:
+                                hashed_password = pwd_context.hash(new_password)
+                                insert_res = supabase.table("teachers").insert({
+                                    "username": new_username,
+                                    "password_hash": hashed_password,
+                                    "teacher_name": new_teacher_name,
+                                    # "email": new_email # 이메일 추가 시
+                                }).execute()
+                                if insert_res.data:
+                                    st.success("회원가입이 완료되었습니다. 로그인 탭에서 로그인해주세요.")
+                                else:
+                                    st.error("회원가입 처리 중 오류가 발생했습니다.")
+                                    print("Signup Error:", insert_res.error)
+                            except Exception as e:
+                                st.error(f"회원가입 중 오류 발생: {e}")
     else:
         # --- 로그인 후 환영 메시지 및 로그아웃 버튼 ---
         st.subheader(f"{st.session_state['teacher_name']} 선생님, 안녕하세요!")
