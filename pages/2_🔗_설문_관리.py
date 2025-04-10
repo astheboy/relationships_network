@@ -3,6 +3,8 @@ import streamlit as st
 from supabase import Client, PostgrestAPIResponse
 import pandas as pd
 from urllib.parse import urlencode # URL 파라미터 생성을 위해 추가
+import qrcode # QR 코드 생성을 위해 추가
+from io import BytesIO # 이미지 메모리 처리를 위해 추가
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="설문 관리", page_icon="🔗", layout="wide")
@@ -64,6 +66,24 @@ try:
 except Exception as e:
     st.error(f"학급 목록을 불러오는 중 오류 발생: {e}")
     selected_class_id = None
+
+# --- QR 코드 생성 함수 ---
+def generate_qr_code(url):
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L, # 오류 복원 레벨
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+
+    # 이미지를 메모리 버퍼에 저장
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 # --- 설문 회차 관리 ---
 if selected_class_id:
@@ -154,36 +174,48 @@ if selected_class_id:
                        st.error(f"상태 업데이트 중 오류: {e}")
 
         st.write("---") # 구분선
-        st.write("📋 설문 링크 확인:")
-        # 설문 선택 (링크 생성용)
-        link_survey_options = {s['survey_name']: s['survey_instance_id'] for i, s in survey_df.iterrows()}
-        selected_survey_name_for_link = st.selectbox(
-             "링크를 확인할 설문을 선택하세요:", options=link_survey_options.keys())
+        st.write("📋 설문 링크 및 QR 코드 확인:")
+        # 설문 선택 (링크/QR 생성용)
+        # survey_df 가 비어있지 않은 경우에만 실행
+        if not survey_df.empty:
+            link_survey_options = {s['survey_name']: s['survey_instance_id'] for i, s in survey_df.iterrows()}
+            selected_survey_name_for_link = st.selectbox(
+                "링크 및 QR 코드를 확인할 설문을 선택하세요:", options=link_survey_options.keys())
 
-        if selected_survey_name_for_link:
-             selected_survey_id_for_link = link_survey_options[selected_survey_name_for_link]
-             # 앱의 기본 URL 가져오기 (배포 환경에 따라 조정 필요)
-             # 로컬 개발 시: http://localhost:8501
-             # Streamlit Cloud 등: 해당 앱 URL
-             # 여기서는 상대 경로 사용 (같은 앱 내 페이지 이동)
-             query_params = urlencode({'page': 'survey_student', 'survey_id': selected_survey_id_for_link})
-             # survey_url = f"/survey_student?{query_params}" # Streamlit 내부 페이지 이동 시
-             # 또는 전체 URL 구성:
-             app_base_url = st.get_option('server.baseUrlPath') # 기본값 '/'
-             # Streamlit Cloud 등 실제 URL 구성 방식은 다를 수 있음
-             # 여기서는 현재 URL 기반으로 단순하게 구성 시도
-             # 주의: 이 방식은 로컬/배포 환경에 따라 정확하지 않을 수 있음
-             current_url = "http://localhost:8501" # 기본 로컬 주소 (실제 환경 맞게 수정 필요)
-             survey_url = f"{current_url}/survey_student?{query_params}"
+            if selected_survey_name_for_link:
+                selected_survey_id_for_link = link_survey_options[selected_survey_name_for_link]
 
+                # --- !!! URL 생성 부분 - 배포 시 주의 !!! ---
+                # 배포된 앱의 실제 URL을 반영하도록 수정 필요
+                # 예시 1: 환경 변수 사용 (Streamlit Cloud Secrets 등)
+                # app_base_url = st.secrets.get("APP_BASE_URL", "http://localhost:8501")
+                # 예시 2: 하드코딩 (배포 후 실제 주소로 변경)
+                app_base_url = "http://localhost:8501" # <<-- 배포 시 실제 앱 주소로 변경 필요!
+                # -------------------------------------------
 
-             st.write(f"**'{selected_survey_name_for_link}' 설문 링크:**")
-             st.code(survey_url)
-             st.caption("이 링크를 복사하여 학생들에게 공유하세요.")
-             # st.link_button("설문 페이지 미리보기", survey_url) # 버튼 형태 링크
+                # URL 파라미터 생성 (survey_id 만 사용)
+                query_params = urlencode({'survey_id': selected_survey_id_for_link})
+                survey_url = f"{app_base_url}/?{query_params}" # Home.py에서 처리하므로 /survey_student 경로 불필요
 
-    else:
-        st.info("아직 생성된 설문이 없습니다.")
+                st.write(f"**'{selected_survey_name_for_link}' 설문 링크:**")
+                st.code(survey_url)
+                st.caption("링크를 복사하거나 아래 QR 코드를 학생들에게 보여주세요.")
+
+                # QR 코드 생성 및 표시
+                try:
+                    qr_code_data = generate_qr_code(survey_url)
+
+                    # 작은 QR 코드 (썸네일) 표시
+                    st.image(qr_code_data, width=150, caption="설문 접속 QR 코드")
+
+                    # Popover를 사용하여 크게 보기 기능 (Streamlit 1.31.0 이상)
+                    with st.popover("QR 코드 크게 보기"):
+                        st.image(qr_code_data, use_column_width=True)
+
+                except Exception as e:
+                    st.error(f"QR 코드 생성 중 오류 발생: {e}")
+        else:
+             st.info("기존 설문 목록에서 설문을 선택해주세요.")
 
     # 새 설문 회차 생성 폼
     with st.expander("➕ 새 설문 회차 생성"):
