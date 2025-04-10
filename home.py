@@ -202,7 +202,7 @@ def render_home_page():
                 new_teacher_name = st.text_input("교사 이름", key="signup_name")
                 new_password = st.text_input("비밀번호", type="password", key="signup_pw1")
                 new_password_confirm = st.text_input("비밀번호 확인", type="password", key="signup_pw2")
-                # new_email = st.text_input("이메일 (선택 사항)", key="signup_email") # 이메일 필드 추가시
+                new_email = st.text_input("이메일 (선택 사항)", key="signup_email") # 이메일 필드 추가시
 
                 signup_submitted = st.form_submit_button("가입하기")
 
@@ -233,7 +233,7 @@ def render_home_page():
                                     "username": new_username,
                                     "password_hash": hashed_password,
                                     "teacher_name": new_teacher_name,
-                                    # "email": new_email # 이메일 추가 시
+                                    "email": new_email # 이메일 추가 시
                                 }).execute()
                                 if insert_res.data:
                                     st.success("회원가입이 완료되었습니다. 로그인 탭에서 로그인해주세요.")

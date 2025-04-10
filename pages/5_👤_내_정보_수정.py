@@ -2,6 +2,7 @@
 import streamlit as st
 from supabase import create_client, Client, PostgrestAPIResponse
 from passlib.context import CryptContext
+import re # 이메일 형식 검증을 위해 추가
 # Home.py와 동일한 Supabase 초기화 및 pwd_context 설정 필요
 
 st.set_page_config(page_title="내 정보 수정", page_icon="👤", layout="centered")
@@ -63,6 +64,47 @@ with st.form("name_change_form"):
                 st.rerun()
             else: st.error("이름 변경 실패")
         except Exception as e: st.error(f"오류: {e}")
+st.divider() # 구분선 추가
+
+# --- !!! 이메일 변경 폼 추가 !!! ---
+with st.form("email_change_form"):
+    st.subheader("이메일 변경")
+    new_email = st.text_input("새 이메일 주소", value=current_data.get('email', ''))
+    password_confirm_email = st.text_input("현재 비밀번호 확인", type="password")
+    email_submitted = st.form_submit_button("이메일 변경하기")
+
+    if email_submitted:
+        if not new_email or not password_confirm_email:
+            st.warning("새 이메일 주소와 현재 비밀번호를 모두 입력해주세요.")
+        # 간단한 이메일 형식 검증
+        elif not re.match(r"[^@]+@[^@]+\.[^@]+", new_email):
+             st.warning("올바른 이메일 형식이 아닙니다.")
+        elif new_email == current_data.get('email'):
+             st.info("현재 이메일 주소와 동일합니다. 변경할 이메일을 입력하세요.")
+        else:
+            try:
+                # 1. 현재 비밀번호 확인
+                pw_res = supabase.table("teachers").select("password_hash").eq("teacher_id", teacher_id).single().execute()
+                if not pw_res.data or not pwd_context.verify(password_confirm_email, pw_res.data['password_hash']):
+                    st.error("현재 비밀번호가 올바르지 않습니다.")
+                else:
+                    # 2. 새 이메일 중복 확인 (다른 사용자가 사용하는지)
+                    email_check_res = supabase.table("teachers").select("teacher_id").eq("email", new_email).neq("teacher_id", teacher_id).execute()
+                    if email_check_res.data:
+                        st.error("이미 다른 사용자가 사용 중인 이메일 주소입니다.")
+                    else:
+                        # 3. 이메일 업데이트 실행
+                        update_res = supabase.table("teachers").update({"email": new_email}).eq("teacher_id", teacher_id).execute()
+                        if update_res.data or (hasattr(update_res, 'status_code') and update_res.status_code == 204):
+                            st.success("이메일 주소가 성공적으로 변경되었습니다.")
+                            st.rerun() # 페이지 새로고침하여 변경된 이메일 표시
+                        else:
+                            st.error(f"이메일 변경 실패: {update_res.error if hasattr(update_res, 'error') else '알 수 없는 오류'}")
+
+            except Exception as e:
+                st.error(f"이메일 변경 중 오류 발생: {e}")
+
+st.divider() # 구분선 추가
 
 # 비밀번호 변경 폼
 with st.form("password_change_form"):
