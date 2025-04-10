@@ -220,9 +220,9 @@ retrieved_value = query_params.get("survey_id") # 단순화된 추출
 if isinstance(retrieved_value, list) and retrieved_value: final_survey_id = retrieved_value[0]
 elif isinstance(retrieved_value, str) and retrieved_value.strip(): final_survey_id = retrieved_value.strip()
 
-st.write(f"DEBUG: Home.py 에서 확인한 query_params: {query_params}")
-st.write(f"DEBUG: Home.py 에서 추출한 survey_id: {final_survey_id}")
-st.write(f"DEBUG: Supabase 객체 유효성: {supabase is not None}")
+# st.write(f"DEBUG: Home.py 에서 확인한 query_params: {query_params}")
+# st.write(f"DEBUG: Home.py 에서 추출한 survey_id: {final_survey_id}")
+# st.write(f"DEBUG: Supabase 객체 유효성: {supabase is not None}")
 
 if final_survey_id and supabase: # 최종 추출된 ID 사용
     render_student_survey(final_survey_id)
