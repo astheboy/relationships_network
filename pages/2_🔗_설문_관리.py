@@ -198,7 +198,7 @@ if selected_class_id:
                     app_base_url = "http://localhost:8501" # secrets 접근 오류 시 로컬로 대체
                     st.warning(f"Streamlit Secrets 읽기 오류 ({e}). 로컬 주소로 링크를 생성합니다.")
 
-                st.write(f"DEBUG: 사용될 Base URL: {app_base_url}") # 디버깅용
+                # st.write(f"DEBUG: 사용될 Base URL: {app_base_url}") # 디버깅용
 
                 # URL 파라미터 생성 (survey_id 만 사용)
                 query_params = urlencode({'survey_id': selected_survey_id_for_link})
