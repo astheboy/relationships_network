@@ -190,28 +190,50 @@ def render_home_page():
     st.caption("© 2025 푸른꿈교실. All rights reserved.")
 
 
-# --- !!! 로그인/로그아웃 함수 (기존 코드) !!! ---
 def check_login(username, password):
-    # ... (기존 check_login 함수 내용 - 이 파일 안에 있어야 함) ...
-    if not supabase: return False
+    if not supabase:
+        st.error("데이터베이스 연결을 확인해주세요.")
+        return False
+
     try:
-        response = supabase.table('teachers').select("...").eq('username', username).execute()
-        if not response.data: return False
+        # 사용자 이름으로 교사 정보 조회
+        response: PostgrestAPIResponse = supabase.table('teachers').select("teacher_id, password_hash, teacher_name").eq('username', username).execute()
+
+        if not response.data:
+            st.warning("존재하지 않는 사용자 이름입니다.")
+            return False
+
         teacher_data = response.data[0]
         stored_hash = teacher_data.get('password_hash')
+        teacher_id = teacher_data.get('teacher_id')
+        teacher_name = teacher_data.get('teacher_name', username) # 이름 없으면 username 사용
+
+        # 비밀번호 검증
         if stored_hash and pwd_context.verify(password, stored_hash):
+            # 로그인 성공: 세션 상태 업데이트
             st.session_state['logged_in'] = True
-            # ... (세션 상태 설정) ...
-            st.rerun()
+            st.session_state['teacher_id'] = teacher_id
+            st.session_state['teacher_name'] = teacher_name
+            st.success(f"{st.session_state['teacher_name']} 선생님, 환영합니다!")
+            time.sleep(1) # 잠시 메시지 보여주고 새로고침
+            st.rerun() # 로그인 후 페이지 새로고침하여 UI 업데이트
             return True
-        else: return False
-    except Exception as e: return False
+        else:
+            st.error("비밀번호가 올바르지 않습니다.")
+            return False
+
+    except Exception as e:
+        st.error(f"로그인 중 오류 발생: {e}")
+        return False
 
 def logout():
-    # ... (기존 logout 함수 내용 - 이 파일 안에 있어야 함) ...
+    # 로그아웃: 세션 상태 초기화
     st.session_state['logged_in'] = False
-    # ... (세션 상태 초기화) ...
-    st.rerun()
+    st.session_state['teacher_id'] = None
+    st.session_state['teacher_name'] = None
+    st.info("로그아웃 되었습니다.")
+    time.sleep(1)
+    st.rerun() # 로그아웃 후 페이지 새로고침
 
 # --- !!! 메인 로직: URL 파라미터 확인 후 분기 !!! ---
 query_params = st.query_params
