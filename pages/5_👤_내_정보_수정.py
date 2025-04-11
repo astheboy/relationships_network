@@ -4,6 +4,7 @@ from supabase import create_client, Client, PostgrestAPIResponse
 from passlib.context import CryptContext
 import re # 이메일 형식 검증을 위해 추가
 # Home.py와 동일한 Supabase 초기화 및 pwd_context 설정 필요
+import os
 
 st.set_page_config(page_title="내 정보 수정", page_icon="👤", layout="centered")
 
@@ -12,16 +13,31 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 @st.cache_resource
 def init_connection():
+    url = None
+    key = None
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        # 앱 전체에서 사용할 수 있도록 에러 로깅 또는 None 반환
-        print(f"Supabase 연결 오류: {e}")
-        # st.error를 여기서 호출하면 다른 페이지 로딩에 영향을 줄 수 있음
-        return None
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY") # 또는 SUPABASE_ANON_KEY 등 Render에 설정한 이름
+        if url and key:
+             st.write("DEBUG: Loaded credentials from environment variables") # 디버깅용
+        else:
+             st.write("DEBUG: Environment variables not found either.") # 디버깅용
 
+
+    if url and key:
+        try:
+            return create_client(url, key)
+        except Exception as e:
+            st.error(f"Supabase 클라이언트 생성 오류: {e}")
+            return None
+    else:
+        # URL 또는 Key를 어디에서도 찾지 못한 경우
+        st.error("Supabase 연결 정보(Secrets 또는 환경 변수)를 찾을 수 없습니다.")
+        return None
 supabase = init_connection()
 
 # --- 인증 확인 ---

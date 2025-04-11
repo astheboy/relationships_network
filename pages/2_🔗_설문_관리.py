@@ -5,6 +5,7 @@ import pandas as pd
 from urllib.parse import urlencode # URL 파라미터 생성을 위해 추가
 import qrcode # QR 코드 생성을 위해 추가
 from io import BytesIO # 이미지 메모리 처리를 위해 추가
+import os
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="설문 관리", page_icon="🔗", layout="wide")
@@ -12,12 +13,30 @@ st.set_page_config(page_title="설문 관리", page_icon="🔗", layout="wide")
 # --- Supabase 클라이언트 가져오기 ---
 @st.cache_resource
 def init_connection():
+    url = None
+    key = None
     try:
         url = st.secrets["supabase"]["url"]
         key = st.secrets["supabase"]["key"]
         return create_client(url, key)
     except Exception as e:
-        st.error(f"Supabase 연결 중 오류 발생: {e}")
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_KEY") # 또는 SUPABASE_ANON_KEY 등 Render에 설정한 이름
+        if url and key:
+             st.write("DEBUG: Loaded credentials from environment variables") # 디버깅용
+        else:
+             st.write("DEBUG: Environment variables not found either.") # 디버깅용
+
+
+    if url and key:
+        try:
+            return create_client(url, key)
+        except Exception as e:
+            st.error(f"Supabase 클라이언트 생성 오류: {e}")
+            return None
+    else:
+        # URL 또는 Key를 어디에서도 찾지 못한 경우
+        st.error("Supabase 연결 정보(Secrets 또는 환경 변수)를 찾을 수 없습니다.")
         return None
 
 from supabase import create_client
