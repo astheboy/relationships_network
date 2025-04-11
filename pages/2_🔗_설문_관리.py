@@ -22,10 +22,11 @@ def init_connection():
     except Exception as e:
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_KEY") # 또는 SUPABASE_ANON_KEY 등 Render에 설정한 이름
-        if url and key:
-             st.write("DEBUG: Loaded credentials from environment variables") # 디버깅용
-        else:
-             st.write("DEBUG: Environment variables not found either.") # 디버깅용
+        base_url = os.environ.gen("base_url")
+        # if url and key:
+        #      st.write("DEBUG: Loaded credentials from environment variables") # 디버깅용
+        # else:
+        #      st.write("DEBUG: Environment variables not found either.") # 디버깅용
 
 
     if url and key:
@@ -204,24 +205,41 @@ if selected_class_id:
             if selected_survey_name_for_link:
                 selected_survey_id_for_link = link_survey_options[selected_survey_name_for_link]
 
-                # --- !!! URL 생성 부분 수정 !!! ---
-                # Secrets에서 배포된 앱의 기본 URL 읽기 시도, 없으면 로컬 주소 사용
-                try:
-                    # secrets.toml 에 [app] base_url = "YOUR_DEPLOYED_URL" 설정 필요
-                    app_base_url = st.secrets.get("app", {}).get("base_url", "http://localhost:8501").strip()
-                    # URL 유효성 기본 체크 (http로 시작하는지)
-                    if not app_base_url or not app_base_url.startswith("http"):
-                        app_base_url = "http://localhost:8501" # 잘못된 경우 로컬로 대체
-                        st.warning("Streamlit Secrets에 유효한 [app] base_url이 설정되지 않았습니다. 로컬 주소로 링크를 생성합니다.")
-                except Exception as e:
-                    app_base_url = "http://localhost:8501" # secrets 접근 오류 시 로컬로 대체
-                    st.warning(f"Streamlit Secrets 읽기 오류 ({e}). 로컬 주소로 링크를 생성합니다.")
+                # --- !!! URL 생성 부분 수정 (Render 환경 변수 우선) !!! ---
+                app_base_url = None
+                # --- ▼▼▼ Render.com에 설정한 환경 변수 이름으로 변경하세요! ▼▼▼ ---
+                env_var_name_for_base_url = "APP_BASE_URL"
+                # --- ▲▲▲ Render.com에 설정한 환경 변수 이름으로 변경하세요! ▲▲▲ ---
 
-                # st.write(f"DEBUG: 사용될 Base URL: {app_base_url}") # 디버깅용
+                # 1순위: 환경 변수 시도 (Render.com 등)
+                app_base_url = os.environ.get(env_var_name_for_base_url)
+                if app_base_url and app_base_url.strip().startswith("http"):
+                    app_base_url = app_base_url.strip()
+                    st.write(f"DEBUG: 환경 변수 '{env_var_name_for_base_url}'에서 base_url 로드: {app_base_url}")
+                else:
+                    # 2순위: Streamlit Secrets 시도 (Streamlit Cloud 또는 로컬)
+                    st.write(f"DEBUG: 환경 변수 '{env_var_name_for_base_url}' 없음/유효하지 않음. Secrets 확인 시도...")
+                    try:
+                        app_base_url = st.secrets.get("app", {}).get("base_url")
+                        if app_base_url and app_base_url.strip().startswith("http"):
+                            app_base_url = app_base_url.strip()
+                            st.write(f"DEBUG: Secrets 'app.base_url'에서 base_url 로드: {app_base_url}")
+                        else:
+                            app_base_url = None # Secrets에도 없거나 유효하지 않음
+                    except Exception as e:
+                        st.write(f"DEBUG: Secrets 접근 중 오류: {e}")
+                        app_base_url = None
 
-                # URL 파라미터 생성 (survey_id 만 사용)
+                # 3순위: 최종 대체 (localhost)
+                if not app_base_url:
+                    app_base_url = "http://localhost:8501" # Streamlit 기본 로컬 주소
+                    st.warning(f"환경 변수('{env_var_name_for_base_url}') 또는 Secrets에서 유효한 base_url을 찾을 수 없습니다. 로컬 주소로 링크를 생성합니다.")
+
+                st.write(f"DEBUG: 최종 사용될 Base URL: {app_base_url}")
+
+                # URL 파라미터 생성 및 최종 URL 조합
                 query_params = urlencode({'survey_id': selected_survey_id_for_link})
-                # Home.py에서 조건부 렌더링하므로 앱 기본 URL + 파라미터 형태
+                # Home.py에서 처리하므로 앱 기본 URL + 파라미터 형태
                 survey_url = f"{app_base_url}/?{query_params}"
                 st.write(f"**'{selected_survey_name_for_link}' 설문 링크:**")
                 st.code(survey_url)
