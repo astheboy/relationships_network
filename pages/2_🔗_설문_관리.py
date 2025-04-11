@@ -22,7 +22,6 @@ def init_connection():
     except Exception as e:
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_KEY") # 또는 SUPABASE_ANON_KEY 등 Render에 설정한 이름
-        base_url = os.environ.gen("base_url")
         # if url and key:
         #      st.write("DEBUG: Loaded credentials from environment variables") # 디버깅용
         # else:
