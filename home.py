@@ -201,18 +201,41 @@ def render_student_survey(survey_id):
             existing_response = None
             response_id_to_update = None
             try:
-                res = supabase.table("survey_responses") \
+                # supabase 객체 유효성 재확인 (선택적이지만 안전)
+                if not supabase:
+                    raise ConnectionError("Supabase 클라이언트(연결)가 유효하지 않습니다.")
+
+                # Supabase 쿼리 실행
+                res: PostgrestAPIResponse = supabase.table("survey_responses") \
                     .select("*") \
                     .eq("survey_instance_id", survey_id) \
                     .eq("student_id", my_student_id) \
                     .maybe_single() \
                     .execute()
-                if res.data:
-                    existing_response = res.data
-                    response_id_to_update = existing_response['response_id'] # Update 시 사용할 ID 저장
-                    st.info("전에 제출한 응답을 불러왔습니다. 내용을 수정 후 다시 제출할 수 있습니다.")
+
+                # --- !!! 중요: res 객체가 None이 아닌지 먼저 확인 !!! ---
+                if res is not None:
+                    # res 객체가 존재하면 .data 속성 확인 (정상적인 응답 또는 데이터 없음)
+                    if hasattr(res, 'data') and res.data: # .data 속성이 있고, 내용이 있을 때
+                        existing_response = res.data
+                        response_id_to_update = existing_response.get('response_id') # ID 가져오기
+                        st.info("이전에 제출한 응답 기록이 있습니다. 내용을 수정 후 다시 제출할 수 있습니다.")
+                        # st.write("DEBUG: Found existing response:", existing_response) # 디버깅용
+                    # else: # res 객체는 있지만 .data가 없거나 비어있는 경우 (maybe_single 결과 0개 - 정상)
+                    #     st.write("DEBUG: No existing response found.") # 디버깅용
+                        pass # existing_response는 None으로 유지됨
+                else:
+                    # res 객체 자체가 None인 경우 (execute() 호출 실패 또는 심각한 오류)
+                    st.error("기존 응답 조회 중 예상치 못한 문제가 발생했습니다 (응답 객체 없음).")
+                    print("Supabase query execute() returned None. Check Supabase status or network.") # 콘솔 로깅
+
+            except ConnectionError as ce:
+                st.error(f"데이터베이스 연결 오류: {ce}")
+                # 여기서 st.stop() 등을 사용하여 진행을 막을 수 있음
             except Exception as e:
-                st.warning(f"기존 응답 확인 중 오류: {e}")
+                # Supabase 쿼리 실행 중 발생한 다른 예외 처리
+                st.warning(f"기존 응답 확인 중 오류 발생: {e}")
+                # 오류 발생 시에도 existing_response는 None으로 유지됨
 
             # 기존 응답 또는 기본값으로 초기값 설정
             initial_relation_mapping = {}
