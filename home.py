@@ -48,9 +48,11 @@ supabase = init_connection()
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'teacher_id' not in st.session_state: st.session_state['teacher_id'] = None
 if 'teacher_name' not in st.session_state: st.session_state['teacher_name'] = None
+if 'gemini_api_key' not in st.session_state: st.session_state['gemini_api_key'] = None
 
 # --- !!! 학생 설문 페이지 렌더링 함수 !!! ---
 def render_student_survey(survey_id):
+    st.title("📝 교우관계 설문")
     # st.set_page_config 호출 제거! (이미 위에서 호출함)
     # st.info(f"DEBUG: 설문 페이지 렌더링 시작 (survey_id: {survey_id})")
 
@@ -62,33 +64,34 @@ def render_student_survey(survey_id):
             st.write(f"DEBUG: Supabase 연결 실패 또는 유효하지 않은 survey_id ({_survey_id})")
             return None, "DB 연결 또는 survey_id 오류", None
         try:
-            # ... (기존 load_survey_data 함수 로직 전체) ...
-            # 예시:
-            survey_response = supabase.table('surveys').select("...").eq('survey_instance_id', _survey_id).single().execute()
-            if not survey_response.data: return None, "설문 정보 없음", None
+            # 설문 정보 조회 (class_id 포함)
+            survey_response = supabase.table('surveys').select("survey_instance_id, survey_name, description, class_id").eq('survey_instance_id', _survey_id).maybe_single().execute()
+            if not survey_response.data: return None, f"ID '{_survey_id}'에 해당하는 설문을 찾을 수 없습니다.", None
             survey_info = survey_response.data
             class_id = survey_info.get('class_id')
-            if not class_id: return survey_info, "학급 정보 없음", None
-            student_response = supabase.table('students').select("...").eq('class_id', class_id).execute()
-            if not student_response.data: return survey_info, "학생 명단 없음", None
+            if not class_id: return survey_info, "설문에 연결된 학급 정보가 없습니다.", None
+
+            # 학생 명단 조회
+            student_response = supabase.table('students').select("student_id, student_name").eq('class_id', class_id).order('student_name').execute()
+            if not student_response.data: return survey_info, "학급에 등록된 학생이 없습니다.", None
             students_df = pd.DataFrame(student_response.data)
             return survey_info, None, students_df
         except Exception as e:
-            #  st.write(f"DEBUG: 데이터 로딩 중 예외 발생: {e}")
-             return None, f"데이터 로딩 중 오류 발생: {e}", None
+            return None, f"데이터 로딩 중 오류 발생: {e}", None
 
     # --- 설문 데이터 로드 ---
     survey_info, error_msg, students_df = load_survey_data(survey_id)
 
     if error_msg:
         st.error(error_msg)
+        st.stop() # 오류 시 중단
     elif not survey_info or students_df is None:
         st.error("설문 정보를 불러올 수 없습니다. URL을 확인하거나 관리자에게 문의하세요.")
+        st.stop() # 오류 시 중단
     else:
-        # --- !!! 여기에 pages/_survey_student.py의 UI 및 제출 로직 전체 삽입 !!! ---
 
     # --- 설문 진행 코드 (기존 코드 유지) ---
-        st.title(f"📝 {survey_info.get('survey_name', '교우관계 설문')}")
+        # st.title(f"📝 {survey_info.get('survey_name', '교우관계 설문')}")
         if survey_info.get('description'):
             st.markdown(survey_info['description'])
         st.divider()
@@ -98,102 +101,240 @@ def render_student_survey(survey_id):
         student_list = students_df['student_name'].tolist()
         my_name = st.selectbox(
             "본인의 이름을 선택해주세요.",
-            options=[""] + student_list, # 빈 값 추가
+            options=[""] + sorted(student_list), # 이름 순 정렬
             index=0,
-            key="my_name_select"
+            key="my_name_select_survey" # 고유 키 지정
         )
+
 
         if my_name:
             my_student_id = students_df[students_df['student_name'] == my_name]['student_id'].iloc[0]
             st.caption(f"{my_name} 학생으로 설문을 진행합니다.")
             st.divider()
 
-            # --- 관계 매핑 (슬라이더 방식) ---
+        #     # --- 관계 매핑 (슬라이더 방식) ---
+        #     st.subheader("2. 친구 관계 입력")
+        #     st.info("각 친구와의 관계 정도를 슬라이더를 움직여 표시해주세요.")
+
+        #     classmates_df = students_df[students_df['student_name'] != my_name] # 본인 제외
+        #     relation_mapping = {} # 관계 점수를 저장할 딕셔너리
+
+        #     for index, row in classmates_df.iterrows():
+        #         classmate_id = row['student_id']
+        #         classmate_name = row['student_name']
+
+        #         # 각 학생마다 슬라이더 생성
+        #         intimacy_score = st.slider(
+        #             label=f"**{classmate_name}** 와(과)의 관계 정도",
+        #             min_value=0,    # 최소값 (예: 매우 어려움)
+        #             max_value=100,  # 최대값 (예: 매우 친함)
+        #             value=50,       # 기본값 (예: 보통)
+        #             step=1,         # 단계 (1 단위로 조절)
+        #             help="0에 가까울수록 어려운 관계, 100에 가까울수록 친한 관계를 의미합니다.",
+        #             key=f"relation_slider_{classmate_id}" # 고유 키 필수
+        #         )
+        #         # 슬라이더 값 저장
+        #         relation_mapping[classmate_id] = {"intimacy": intimacy_score}
+        #         st.write("---") # 학생 간 구분선
+
+        #     st.divider()
+
+        #     # --- 추가 설문 항목 (기존과 동일) ---
+        #     st.subheader("3. 추가 질문")
+        #     with st.form("survey_form"):
+        #         # ... (기존 추가 질문 입력 필드들) ...
+        #         praise_friend = st.text_input("우리 반에서 칭찬하고 싶은(친해지고 싶은) 친구는? (없으면 비워두세요)")
+        #         praise_reason = st.text_input("우리 반에서 칭찬하고 싶은(친해지고 싶은) 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+        #         difficult_friend = st.text_input("우리 반에서 대하기 어려운 친구는? (없으면 비워두세요)")
+        #         difficult_reason = st.text_input("우리 반에서 대하기 어려운 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+        #         otherclass_friendly_name = st.text_input("다른 반에서 요즘 친한 친구는? (없으면 비워두세요)")
+        #         otherclass_friendly_reason = st.text_input("다른 반에서 친한 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+        #         otherclass_bad_name = st.text_input("다른 반에서 요즘 대하기 어려운 친구는? (없으면 비워두세요)")
+        #         otherclass_bad_reason = st.text_input("다른 반에서 대하기 어려운 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
+        #         concern = st.text_area("요즘 학급이나 학교에서 어렵거나 힘든 점이 있다면 적어주세요.")
+        #         teacher_message = st.text_area("그 외 선생님께 하고 싶은 말을 자유롭게 적어주세요.")
+
+        #         submitted = st.form_submit_button("설문 제출하기")
+
+        #         if submitted:
+        #             # --- 제출 처리 (relation_mapping_json 부분은 동일) ---
+        #             st.info("답변을 제출 중입니다...")
+        #             try:
+        #                 # 관계 매핑 데이터를 JSON 문자열로 변환
+        #                 relation_mapping_json = json.dumps(relation_mapping, ensure_ascii=False)
+
+        #                 # 응답 데이터 구성 (relation_mapping_data 컬럼 사용)
+        #                 response_data = {
+        #                     'survey_instance_id': final_survey_id,
+        #                     'student_id': my_student_id,
+        #                     'relation_mapping_data': relation_mapping_json, # 슬라이더 점수 저장
+        #                     'praise_friend': praise_friend,
+        #                     'praise_reason': praise_reason,
+        #                     'difficult_friend': difficult_friend,
+        #                     'difficult_reason': difficult_reason,
+        #                     'otherclass_friendly_name': otherclass_friendly_name,
+        #                     'otherclass_friendly_reason': otherclass_friendly_reason,
+        #                     'otherclass_bad_name': otherclass_bad_name,
+        #                     'otherclass_bad_reason': otherclass_bad_reason,
+        #                     'concern': concern,
+        #                     'teacher_message': teacher_message,
+        #                 }
+
+        #                 # Supabase에 데이터 삽입
+        #                 insert_response = supabase.table('survey_responses').insert(response_data).execute()
+
+        #                 # ... (제출 성공/실패 처리 로직) ...
+        #                 if insert_response.data:
+        #                         st.success("설문이 성공적으로 제출되었습니다. 참여해주셔서 감사합니다!")
+        #                         st.balloons()
+        #                 else:
+        #                         st.error("설문 제출 중 오류가 발생했습니다. 다시 시도해주세요.")
+        #                         print("Supabase insert error:", insert_response.error)
+
+        #             except Exception as e:
+        #                 st.error(f"설문 제출 중 오류 발생: {e}")
+
+        # else:
+        #     st.info("먼저 본인의 이름을 선택해주세요.")
+        # # st.write("학생 설문 페이지 내용 (구현 필요)") # 임시 Placeholder
+            # --- 기존 응답 조회 ---
+            existing_response = None
+            response_id_to_update = None
+            try:
+                res = supabase.table("survey_responses") \
+                    .select("*") \
+                    .eq("survey_instance_id", survey_id) \
+                    .eq("student_id", my_student_id) \
+                    .maybe_single() \
+                    .execute()
+                if res.data:
+                    existing_response = res.data
+                    response_id_to_update = existing_response['response_id'] # Update 시 사용할 ID 저장
+                    st.info("전에 제출한 응답을 불러왔습니다. 내용을 수정 후 다시 제출할 수 있습니다.")
+            except Exception as e:
+                st.warning(f"기존 응답 확인 중 오류: {e}")
+
+            # 기존 응답 또는 기본값으로 초기값 설정
+            initial_relation_mapping = {}
+            if existing_response and existing_response.get('relation_mapping_data'):
+                try:
+                    # relation_mapping_data가 문자열일 경우 json.loads 사용
+                    if isinstance(existing_response['relation_mapping_data'], str):
+                        initial_relation_mapping = json.loads(existing_response['relation_mapping_data'])
+                    # 이미 dict/list 형태일 경우 그대로 사용
+                    elif isinstance(existing_response['relation_mapping_data'], (dict, list)):
+                         initial_relation_mapping = existing_response['relation_mapping_data']
+                except json.JSONDecodeError:
+                    st.warning("기존 관계 데이터를 불러오는 데 실패했습니다.")
+                except Exception as e_parse:
+                     st.warning(f"기존 관계 데이터 처리 오류: {e_parse}")
+
+
+            initial_values = {}
+            fields_to_load = [
+                'praise_friend', 'praise_reason', 'difficult_friend', 'difficult_reason',
+                'otherclass_friendly_name', 'otherclass_friendly_reason',
+                'otherclass_bad_name', 'otherclass_bad_reason', 'concern', 'teacher_message'
+            ]
+            for field in fields_to_load:
+                initial_values[field] = existing_response.get(field, '') if existing_response else ''
+
+            # --- 관계 매핑 (슬라이더 방식 - value 설정 추가) ---
             st.subheader("2. 친구 관계 입력")
             st.info("각 친구와의 관계 정도를 슬라이더를 움직여 표시해주세요.")
-
-            classmates_df = students_df[students_df['student_name'] != my_name] # 본인 제외
-            relation_mapping = {} # 관계 점수를 저장할 딕셔너리
-
+            relation_mapping_inputs = {}
+            classmates_df = students_df[students_df['student_id'] != my_student_id]
             for index, row in classmates_df.iterrows():
                 classmate_id = row['student_id']
                 classmate_name = row['student_name']
-
-                # 각 학생마다 슬라이더 생성
-                intimacy_score = st.slider(
-                    label=f"**{classmate_name}** 와(과)의 관계 정도",
-                    min_value=0,    # 최소값 (예: 매우 어려움)
-                    max_value=100,  # 최대값 (예: 매우 친함)
-                    value=50,       # 기본값 (예: 보통)
-                    step=1,         # 단계 (1 단위로 조절)
-                    help="0에 가까울수록 어려운 관계, 100에 가까울수록 친한 관계를 의미합니다.",
-                    key=f"relation_slider_{classmate_id}" # 고유 키 필수
-                )
-                # 슬라이더 값 저장
-                relation_mapping[classmate_id] = {"intimacy": intimacy_score}
-                st.write("---") # 학생 간 구분선
+                default_score = initial_relation_mapping.get(classmate_id, {}).get('intimacy', 50)
+                # 슬라이더 생성 및 값 저장
+                relation_mapping_inputs[classmate_id] = {
+                    "intimacy": st.slider(
+                        label=f"**{classmate_name}** 와(과)의 관계 정도",
+                        min_value=0, max_value=100, value=int(default_score), step=1, # 정수형으로 변환
+                        help="0(매우 어려움) ~ 100(매우 친함)",
+                        key=f"relation_slider_{classmate_id}"
+                    )
+                }
+                # st.write("---") # 구분선 제거 또는 유지
 
             st.divider()
 
-            # --- 추가 설문 항목 (기존과 동일) ---
+            # --- 추가 설문 항목 (value 설정 추가) ---
             st.subheader("3. 추가 질문")
             with st.form("survey_form"):
-                # ... (기존 추가 질문 입력 필드들) ...
-                praise_friend = st.text_input("우리 반에서 칭찬하고 싶은(친해지고 싶은) 친구는? (없으면 비워두세요)")
-                praise_reason = st.text_input("우리 반에서 칭찬하고 싶은(친해지고 싶은) 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
-                difficult_friend = st.text_input("우리 반에서 대하기 어려운 친구는? (없으면 비워두세요)")
-                difficult_reason = st.text_input("우리 반에서 대하기 어려운 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
-                otherclass_friendly_name = st.text_input("다른 반에서 요즘 친한 친구는? (없으면 비워두세요)")
-                otherclass_friendly_reason = st.text_input("다른 반에서 친한 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
-                otherclass_bad_name = st.text_input("다른 반에서 요즘 대하기 어려운 친구는? (없으면 비워두세요)")
-                otherclass_bad_reason = st.text_input("다른 반에서 대하기 어려운 친구를 선택한 이유를 적어주세요. (없으면 비워두세요)")
-                concern = st.text_area("요즘 학급이나 학교에서 어렵거나 힘든 점이 있다면 적어주세요.")
-                teacher_message = st.text_area("그 외 선생님께 하고 싶은 말을 자유롭게 적어주세요.")
+                praise_friend = st.text_input("우리 반에서 칭찬하고 싶은 친구는?", value=initial_values['praise_friend'])
+                praise_reason = st.text_area("칭찬하는 이유는 무엇인가요?", value=initial_values['praise_reason'])
+                st.markdown("---")
+                difficult_friend = st.text_input("우리 반에서 내가 상대적으로 대하기 어려운 친구는?", value=initial_values['difficult_friend'])
+                difficult_reason = st.text_area("어렵게 느끼는 이유는 무엇인가요?", value=initial_values['difficult_reason'])
+                st.markdown("---")
+                other_friendly_name = st.text_input("옆 반 친구들 중 나랑 관계가 좋은 친구가 있나요?", value=initial_values['otherclass_friendly_name'])
+                other_friendly_reason = st.text_area("친하게 지내는 이유는 무엇인가요?", value=initial_values['otherclass_friendly_reason'])
+                st.markdown("---")
+                other_bad_name = st.text_input("옆 반 친구들 중 나랑 관계가 안 좋은 친구가 있나요?", value=initial_values['otherclass_bad_name'])
+                other_bad_reason = st.text_area("안 좋게 느끼는 이유는 무엇인가요?", value=initial_values['otherclass_bad_reason'])
+                st.markdown("---")
+                concern = st.text_area("학교생활 중 힘들었던 일이나 고민이 있나요?", value=initial_values['concern'])
+                st.markdown("---")
+                teacher_message = st.text_area("그 외 선생님께 하고 싶은 말을 자유롭게 적어주세요.", value=initial_values['teacher_message'])
 
-                submitted = st.form_submit_button("설문 제출하기")
+                submit_button_label = "수정하기" if existing_response else "제출하기"
+                submitted = st.form_submit_button(submit_button_label)
 
                 if submitted:
-                    # --- 제출 처리 (relation_mapping_json 부분은 동일) ---
-                    st.info("답변을 제출 중입니다...")
+                    st.info("답변을 처리 중입니다...")
+                    # 관계 매핑 데이터를 JSON 문자열로 변환
+                    relation_mapping_json = json.dumps(relation_mapping_inputs, ensure_ascii=False)
+
+                    # DB에 저장할 데이터 구성
+                    response_data = {
+                        'relation_mapping_data': relation_mapping_json,
+                        'praise_friend': praise_friend,
+                        'praise_reason': praise_reason,
+                        'difficult_friend': difficult_friend,
+                        'difficult_reason': difficult_reason,
+                        'otherclass_friendly_name': other_friendly_name,
+                        'otherclass_friendly_reason': other_friendly_reason,
+                        'otherclass_bad_name': other_bad_name,
+                        'otherclass_bad_reason': other_bad_reason,
+                        'concern': concern,
+                        'teacher_message': teacher_message,
+                        # submission_time 은 DB에서 default now() 또는 update 시 자동 갱신될 수 있음
+                    }
+
                     try:
-                        # 관계 매핑 데이터를 JSON 문자열로 변환
-                        relation_mapping_json = json.dumps(relation_mapping, ensure_ascii=False)
-
-                        # 응답 데이터 구성 (relation_mapping_data 컬럼 사용)
-                        response_data = {
-                            'survey_instance_id': final_survey_id,
-                            'student_id': my_student_id,
-                            'relation_mapping_data': relation_mapping_json, # 슬라이더 점수 저장
-                            'praise_friend': praise_friend,
-                            'praise_reason': praise_reason,
-                            'difficult_friend': difficult_friend,
-                            'difficult_reason': difficult_reason,
-                            'otherclass_friendly_name': otherclass_friendly_name,
-                            'otherclass_friendly_reason': otherclass_friendly_reason,
-                            'otherclass_bad_name': otherclass_bad_name,
-                            'otherclass_bad_reason': otherclass_bad_reason,
-                            'concern': concern,
-                            'teacher_message': teacher_message,
-                        }
-
-                        # Supabase에 데이터 삽입
-                        insert_response = supabase.table('survey_responses').insert(response_data).execute()
-
-                        # ... (제출 성공/실패 처리 로직) ...
-                        if insert_response.data:
+                        if existing_response:
+                            # --- UPDATE 로직 ---
+                            response = supabase.table('survey_responses') \
+                                .update(response_data) \
+                                .eq('response_id', response_id_to_update) \
+                                .execute()
+                            # Supabase V2 update는 성공 시 data가 없을 수 있음
+                            if response.data or (hasattr(response, 'status_code') and response.status_code == 204):
+                                st.success("응답이 성공적으로 수정되었습니다. 감사합니다!")
+                                st.balloons()
+                            else:
+                                st.error("응답 수정 중 오류가 발생했습니다.")
+                                print("Update Error:", response.error if hasattr(response, 'error') else response)
+                        else:
+                            # --- INSERT 로직 ---
+                            response_data['survey_instance_id'] = survey_id
+                            response_data['student_id'] = my_student_id
+                            response = supabase.table('survey_responses').insert(response_data).execute()
+                            if response.data:
                                 st.success("설문이 성공적으로 제출되었습니다. 참여해주셔서 감사합니다!")
                                 st.balloons()
-                        else:
-                                st.error("설문 제출 중 오류가 발생했습니다. 다시 시도해주세요.")
-                                print("Supabase insert error:", insert_response.error)
+                            else:
+                                st.error("설문 제출 중 오류가 발생했습니다.")
+                                print("Insert Error:", response.error if hasattr(response, 'error') else response)
 
                     except Exception as e:
-                        st.error(f"설문 제출 중 오류 발생: {e}")
+                        st.error(f"처리 중 오류 발생: {e}")
 
         else:
             st.info("먼저 본인의 이름을 선택해주세요.")
-        # st.write("학생 설문 페이지 내용 (구현 필요)") # 임시 Placeholder
-
 # --- !!! 메인 교사 페이지 렌더링 함수 !!! ---
 def render_home_page():
     # st.set_page_config 호출 제거!
