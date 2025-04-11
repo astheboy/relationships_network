@@ -245,8 +245,7 @@ def render_home_page():
     else:
         # --- 로그인 후 환영 메시지 및 로그아웃 버튼 ---
         st.subheader(f"{st.session_state['teacher_name']} 선생님, 안녕하세요!")
-        st.write("왼쪽 사이드바 메뉴를 통해 학급 관리, 설문 관리, 분석 대시보드 등의 기능을 이용할 수 있습니다.")
-
+        # ... (기존 환영 메시지 코드) ...
         if st.button("로그아웃"):
             logout() # logout 호출
 
