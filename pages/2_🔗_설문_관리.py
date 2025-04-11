@@ -214,15 +214,15 @@ if selected_class_id:
                 app_base_url = os.environ.get(env_var_name_for_base_url)
                 if app_base_url and app_base_url.strip().startswith("http"):
                     app_base_url = app_base_url.strip()
-                    st.write(f"DEBUG: 환경 변수 '{env_var_name_for_base_url}'에서 base_url 로드: {app_base_url}")
+                    # st.write(f"DEBUG: 환경 변수 '{env_var_name_for_base_url}'에서 base_url 로드: {app_base_url}")
                 else:
                     # 2순위: Streamlit Secrets 시도 (Streamlit Cloud 또는 로컬)
-                    st.write(f"DEBUG: 환경 변수 '{env_var_name_for_base_url}' 없음/유효하지 않음. Secrets 확인 시도...")
+                    # st.write(f"DEBUG: 환경 변수 '{env_var_name_for_base_url}' 없음/유효하지 않음. Secrets 확인 시도...")
                     try:
                         app_base_url = st.secrets.get("app", {}).get("base_url")
                         if app_base_url and app_base_url.strip().startswith("http"):
                             app_base_url = app_base_url.strip()
-                            st.write(f"DEBUG: Secrets 'app.base_url'에서 base_url 로드: {app_base_url}")
+                            # st.write(f"DEBUG: Secrets 'app.base_url'에서 base_url 로드: {app_base_url}")
                         else:
                             app_base_url = None # Secrets에도 없거나 유효하지 않음
                     except Exception as e:
@@ -234,7 +234,7 @@ if selected_class_id:
                     app_base_url = "http://localhost:8501" # Streamlit 기본 로컬 주소
                     st.warning(f"환경 변수('{env_var_name_for_base_url}') 또는 Secrets에서 유효한 base_url을 찾을 수 없습니다. 로컬 주소로 링크를 생성합니다.")
 
-                st.write(f"DEBUG: 최종 사용될 Base URL: {app_base_url}")
+                # st.write(f"DEBUG: 최종 사용될 Base URL: {app_base_url}")
 
                 # URL 파라미터 생성 및 최종 URL 조합
                 query_params = urlencode({'survey_id': selected_survey_id_for_link})
