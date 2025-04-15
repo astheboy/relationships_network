@@ -250,17 +250,17 @@ if selected_class_id and selected_survey_id:
             # text_columns = [...]
             # st.dataframe(analysis_df[available_text_columns])
 
-        with tab3:
-            st.header("원본 데이터 보기")
-            # --- !!! 여기에 전체 원본 DataFrame 표시 코드 !!! ---
-            st.dataframe(analysis_df, use_container_width=True)
-            st.caption("`parsed_relations` 열에서 각 학생이 다른 학생들에게 매긴 친밀도 점수를 확인할 수 있습니다.")
-            st.write("원본 데이터 테이블 표시")
-            # st.dataframe(analysis_df)
+        # with tab3:
+        #     st.header("원본 데이터 보기")
+        #     # --- !!! 여기에 전체 원본 DataFrame 표시 코드 !!! ---
+        #     st.dataframe(analysis_df, use_container_width=True)
+        #     st.caption("`parsed_relations` 열에서 각 학생이 다른 학생들에게 매긴 친밀도 점수를 확인할 수 있습니다.")
+        #     st.write("원본 데이터 테이블 표시")
+        #     # st.dataframe(analysis_df)
 
         # --- AI 심층 분석 탭 (조건부 내용 표시) ---
 
-        with tab4:
+        with tab3:
             st.header("✨ AI 기반 심층 분석 (Gemini)")
 
             # 세션에서 API 키 확인
