@@ -234,6 +234,7 @@ if selected_class_id and selected_survey_id:
             st.divider() # 구분선 추가
 
             # --- 2. 준 친밀도 점수 분석 (새로 추가) ---
+            st.markdown("---")
             st.subheader("학생별 평균 준 친밀도 점수")
 
             # 함수: 각 학생이 '준' 점수들의 평균과 목록 계산
@@ -300,6 +301,58 @@ if selected_class_id and selected_survey_id:
 
                 # --- (선택 사항) 개인별 준 점수 분포 시각화 ---
                 st.markdown("---")
+
+                # --- 3. 학급 전체 친밀도 점수 분포 (새로 추가) ---
+                st.subheader("학급 전체 친밀도 점수 분포")
+
+                all_scores_given = [] # 모든 점수를 담을 리스트
+                # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
+                # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
+                for relations in analysis_df['parsed_relations'].dropna():
+                    # relations가 dict 타입인지, 내용이 있는지 확인
+                    if isinstance(relations, dict) and relations:
+                        for info in relations.values():
+                            score = info.get('intimacy')
+                            # score가 숫자 타입인지 확인
+                            if isinstance(score, (int, float)):
+                                all_scores_given.append(score)
+
+                if all_scores_given: # 추출된 점수가 있을 경우
+                    # 점수 목록으로 DataFrame 생성
+                    scores_dist_df = pd.DataFrame({'점수': all_scores_given})
+
+                    # 히스토그램 생성
+                    fig_overall_dist = px.histogram(
+                        scores_dist_df,
+                        x='점수', # X축은 점수
+                        title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
+                        labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
+                        nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
+                        range_x=[0, 100] # X축 범위 0-100으로 고정
+                    )
+                    # 그래프 레이아웃 추가 설정
+                    fig_overall_dist.update_layout(
+                        bargap=0.1, # 막대 사이 간격
+                        yaxis_title="응답 빈도수" # Y축 제목
+                    )
+                    st.plotly_chart(fig_overall_dist, use_container_width=True)
+
+                    # 간단한 통계 정보 추가 (선택 사항)
+                    try:
+                        avg_overall = scores_dist_df['점수'].mean()
+                        median_overall = scores_dist_df['점수'].median()
+                        stdev_overall = scores_dist_df['점수'].std()
+                        st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
+                        st.write(f"**중앙값:** {median_overall:.0f}")
+                        st.write(f"**표준편차:** {stdev_overall:.1f}")
+                        st.caption("""
+                        * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
+                        * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
+                        * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
+                        """)
+                    except Exception as stat_e:
+                        st.warning(f"통계 계산 중 오류: {stat_e}")
+                st.markdown("---")        
                 st.subheader("개인별 '준' 점수 분포 확인")
                 # 학생 이름 목록 생성 (submitter_name 사용)
                 # 학생 이름 목록 생성 (avg_given_df에서 가져옴 - 이전 단계에서 생성됨)
@@ -351,58 +404,7 @@ if selected_class_id and selected_survey_id:
                             else:
                                 st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
                         else:
-                             st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우
-                # --- 3. 학급 전체 친밀도 점수 분포 (새로 추가) ---
-                st.subheader("학급 전체 친밀도 점수 분포")
-
-                all_scores_given = [] # 모든 점수를 담을 리스트
-                # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
-                # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
-                for relations in analysis_df['parsed_relations'].dropna():
-                    # relations가 dict 타입인지, 내용이 있는지 확인
-                    if isinstance(relations, dict) and relations:
-                        for info in relations.values():
-                            score = info.get('intimacy')
-                            # score가 숫자 타입인지 확인
-                            if isinstance(score, (int, float)):
-                                all_scores_given.append(score)
-
-                if all_scores_given: # 추출된 점수가 있을 경우
-                    # 점수 목록으로 DataFrame 생성
-                    scores_dist_df = pd.DataFrame({'점수': all_scores_given})
-
-                    # 히스토그램 생성
-                    fig_overall_dist = px.histogram(
-                        scores_dist_df,
-                        x='점수', # X축은 점수
-                        title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
-                        labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
-                        nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
-                        range_x=[0, 100] # X축 범위 0-100으로 고정
-                    )
-                    # 그래프 레이아웃 추가 설정
-                    fig_overall_dist.update_layout(
-                        bargap=0.1, # 막대 사이 간격
-                        yaxis_title="응답 빈도수" # Y축 제목
-                    )
-                    st.plotly_chart(fig_overall_dist, use_container_width=True)
-
-                    # 간단한 통계 정보 추가 (선택 사항)
-                    try:
-                        avg_overall = scores_dist_df['점수'].mean()
-                        median_overall = scores_dist_df['점수'].median()
-                        stdev_overall = scores_dist_df['점수'].std()
-                        st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
-                        st.write(f"**중앙값:** {median_overall:.0f}")
-                        st.write(f"**표준편차:** {stdev_overall:.1f}")
-                        st.caption("""
-                        * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
-                        * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
-                        * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
-                        """)
-                    except Exception as stat_e:
-                        st.warning(f"통계 계산 중 오류: {stat_e}")
-     
+                             st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우     
             else:
                 st.write("받은 친밀도 점수 데이터가 부족하여 분석할 수 없습니다.")
             st.write("기본 관계 분석 내용 표시")
