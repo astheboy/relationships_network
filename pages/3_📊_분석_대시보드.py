@@ -6,6 +6,7 @@ import json
 import plotly.express as px # 시각화를 위해 Plotly 추가 (pip install plotly)
 import os
 from utils import call_gemini
+import itertools
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="분석 대시보드", page_icon="📊", layout="wide")
@@ -234,7 +235,6 @@ if selected_class_id and selected_survey_id:
             st.divider() # 구분선 추가
 
             # --- 2. 준 친밀도 점수 분석 (새로 추가) ---
-            st.markdown("---")
             st.subheader("학생별 평균 준 친밀도 점수")
 
             # 함수: 각 학생이 '준' 점수들의 평균과 목록 계산
@@ -405,6 +405,106 @@ if selected_class_id and selected_survey_id:
                                 st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
                         else:
                              st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우     
+                        # --- 4. 관계 상호성 분석 (새로 추가) ---
+                st.subheader("관계 상호성 분석 (Reciprocity)")
+
+                # 함수: 상호 평가 점수 계산 및 관계 유형 분류
+                @st.cache_data # 계산 결과를 캐싱
+                def analyze_reciprocity(df, student_map):
+                    # 입력 데이터 유효성 검사
+                    if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
+                        return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+
+                    # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
+                    #   Key: (주는학생ID, 받는학생ID), Value: 점수
+                    score_lookup = {}
+                    for index, row in df.iterrows():
+                        submitter_id = row['submitter_id']
+                        relations = row.get('parsed_relations', {})
+                        if isinstance(relations, dict):
+                            for target_id, info in relations.items():
+                                # target_id가 실제 학급 학생인지 확인 (students_map 사용)
+                                if target_id in student_map:
+                                    score = info.get('intimacy')
+                                    if isinstance(score, (int, float)):
+                                        score_lookup[(submitter_id, target_id)] = score
+
+                    # 2. 모든 학생 쌍에 대해 상호 점수 확인
+                    student_ids = list(student_map.keys())
+                    reciprocal_data = []
+
+                    # 모든 가능한 학생 쌍 (A, B) 조합 생성 (itertools 사용)
+                    for id_a, id_b in itertools.combinations(student_ids, 2):
+                        # A가 B에게 준 점수 조회
+                        score_a_to_b = score_lookup.get((id_a, id_b))
+                        # B가 A에게 준 점수 조회
+                        score_b_to_a = score_lookup.get((id_b, id_a))
+
+                        # 둘 다 서로 평가한 경우에만 분석 대상에 포함
+                        if score_a_to_b is not None and score_b_to_a is not None:
+                            name_a = student_map.get(id_a, "알 수 없음")
+                            name_b = student_map.get(id_b, "알 수 없음")
+                            reciprocal_data.append({
+                                '학생 A': name_a,
+                                '학생 B': name_b,
+                                'A->B 점수': score_a_to_b,
+                                'B->A 점수': score_b_to_a
+                            })
+
+                    if not reciprocal_data: # 상호 평가 데이터가 없으면 빈 DataFrame 반환
+                        return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+
+                    reciprocity_df = pd.DataFrame(reciprocal_data)
+
+                    # 3. 관계 유형 분류 함수 정의
+                    def categorize_relationship(row, high_threshold=75, low_threshold=35): # 기준점수 조절 가능
+                        score_ab = row['A->B 점수']
+                        score_ba = row['B->A 점수']
+                        high_a = score_ab >= high_threshold
+                        low_a = score_ab <= low_threshold
+                        high_b = score_ba >= high_threshold
+                        low_b = score_ba <= low_threshold
+
+                        if high_a and high_b: return "✅ 상호 높음"
+                        if low_a and low_b: return "⚠️ 상호 낮음"
+                        if high_a and low_b: return f"↗️ {row['학생 A']} > {row['학생 B']} (일방 높음)"
+                        if low_a and high_b: return f"↖️ {row['학생 B']} > {row['학생 A']} (일방 높음)"
+                        # 필요시 중간 유형 추가 가능
+                        return "↔️ 혼합/중간"
+
+                    # DataFrame에 '관계 유형' 컬럼 추가
+                    reciprocity_df['관계 유형'] = reciprocity_df.apply(categorize_relationship, axis=1)
+                    return reciprocity_df
+
+                # 상호성 분석 실행
+                reciprocity_results_df = analyze_reciprocity(analysis_df, students_map)
+
+                if not reciprocity_results_df.empty:
+                    st.write("서로 점수를 매긴 학생 쌍 간의 관계 유형입니다.")
+
+                    # 요약 통계: 관계 유형별 개수
+                    type_counts = reciprocity_results_df['관계 유형'].value_counts()
+                    st.write("##### 관계 유형별 분포:")
+                    st.dataframe(type_counts)
+                    # 파이 차트 추가 (선택 사항)
+                    # fig_pie = px.pie(type_counts, values=type_counts.values, names=type_counts.index, title="관계 유형 비율")
+                    # st.plotly_chart(fig_pie, use_container_width=True)
+
+
+                    # 상세 테이블: 상호 평가 목록
+                    st.write("##### 상세 관계 목록:")
+                    # 컬럼 순서 및 이름 변경하여 표시 (선택 사항)
+                    display_df = reciprocity_results_df[['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형']]
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+                    # (고급/선택) 네트워크 그래프 시각화
+                    # if st.checkbox("관계 네트워크 그래프 보기 (상호 평가 기반)"):
+                    #     st.info("네트워크 그래프 기능은 준비 중입니다.")
+                    #     # NetworkX, Pyvis 등을 사용하여 그래프 생성 및 표시 로직 추가
+
+                else:
+                    st.write("상호 평가 데이터가 부족하여 관계 상호성 분석을 할 수 없습니다.")
+                    st.caption("학생들이 서로에 대해 충분히 평가해야 이 분석이 가능합니다.")        
             else:
                 st.write("받은 친밀도 점수 데이터가 부족하여 분석할 수 없습니다.")
             st.write("기본 관계 분석 내용 표시")
