@@ -183,8 +183,8 @@ if selected_class_id and selected_survey_id:
 
     if analysis_df is not None and students_map:
         # --- 탭 구성 (기본 분석 + AI 분석 탭) ---
-        tab_list = ["📊 관계 분석", "💬 서술형 응답", "📄 원본 데이터", "✨ AI 심층 분석"]
-        tab1, tab2, tab3, tab4 = st.tabs(tab_list)
+        tab_list = ["📊 관계 분석", "💬 서술형 응답", "✨ AI 심층 분석"]
+        tab1, tab2, tab3 = st.tabs(tab_list)
 
         with tab1:
             st.header("관계 분석 (친밀도 점수 기반)")
