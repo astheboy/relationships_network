@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import plotly.express as px # 시각화를 위해 Plotly 추가 (pip install plotly)
 import os
+from utils import call_gemini
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="분석 대시보드", page_icon="📊", layout="wide")
@@ -258,28 +259,138 @@ if selected_class_id and selected_survey_id:
             # st.dataframe(analysis_df)
 
         # --- AI 심층 분석 탭 (조건부 내용 표시) ---
+
         with tab4:
-            st.header("AI 기반 심층 분석 (Gemini)")
+            st.header("✨ AI 기반 심층 분석 (Gemini)")
 
             # 세션에서 API 키 확인
             api_key = st.session_state.get('gemini_api_key')
 
+
+
             if api_key:
                 st.success("✅ Gemini API 키가 활성화되어 AI 분석 기능을 사용할 수 있습니다.")
-                st.write("AI 분석 결과를 여기에 표시합니다. (예: 주요 고민 요약, 관계 패턴 분석 등)")
+                st.markdown("---")
 
-                # --- !!! 여기에 AI 분석 실행 버튼 및 결과 표시 로직 구현 !!! ---
-                # 예시:
-                if st.button("학생 고민 내용 AI 요약"):
-                    # analysis_df['concern'] 내용을 가져와서 Gemini API 호출
-                    # 결과 표시
-                    st.info("AI 요약 기능 구현 예정")
-                    pass
+                # --- AI 분석 기능 선택 ---
+                analysis_option = st.selectbox(
+                    "어떤 내용을 분석하시겠어요?",
+                    ["선택하세요", "학생 고민 전체 요약", "학생별 관계 프로파일 생성", "학급 전체 관계 요약 (준비중)", "주요 키워드 추출 (준비중)"]
+                )
 
-                # 다른 AI 분석 기능 추가...
+                if analysis_option == "학생 고민 전체 요약":
+                    st.subheader("학생 고민 전체 요약")
+                    # analysis_df에 'concern' 컬럼이 있는지, 데이터가 있는지 확인
+                    if 'concern' in analysis_df.columns and not analysis_df['concern'].isnull().all():
+                                                # --- !!! 여기!!! all_concerns 변수 정의 추가 !!! ---
+                        # 'concern' 컬럼에서 실제 내용이 있는 텍스트만 추출 (None, 빈 문자열, "없다", "없음" 제외)
+                        valid_concerns = []
+                        for item in analysis_df['concern']:
+                            if isinstance(item, str) and item.strip() and item.strip().lower() not in ['없다', '없음']:
+                                valid_concerns.append(item.strip())
+                        all_concerns = valid_concerns # 최종 리스트 할당
+                        # ------------------------------------------------
+
+                        # 이제 all_concerns 변수가 정의되었으므로 아래 코드 사용 가능
+                        if all_concerns:
+                            # 요약 버튼
+                            if st.button("AI 요약 실행하기", key="summarize_concerns"):
+                                with st.spinner("AI가 고민 내용을 요약 중입니다..."):
+                                    # 프롬프트 구성
+                                    prompt = f"""
+                                    다음은 학생들이 익명으로 작성한 학교생활 고민 내용들입니다.
+                                    각 고민 내용은 "-----"로 구분되어 있습니다.
+                                    전체 내용을 바탕으로 주요 고민 주제 3~5가지와 각 주제별 핵심 내용을 요약해주세요.
+                                    결과는 한국어 불렛포인트 형태로 명확하게 제시해주세요.
+
+                                    고민 목록:
+                                    { "-----".join(all_concerns) }
+
+                                    요약:
+                                    """
+                                    # AI 호출
+                                    summary = call_gemini(prompt, api_key)
+                                    # 결과 표시
+                                    st.markdown("#### AI 요약 결과:")
+                                    st.info(summary) # 또는 st.text_area
+                        else:
+                            st.info("요약할 만한 유효한 고민 내용이 없습니다.")
+                    else:
+                        st.warning("분석할 'concern' 데이터가 없습니다.")
+                elif analysis_option == "학생별 관계 프로파일 생성":
+                    st.subheader("학생별 관계 프로파일 생성")
+                    if students_map:
+                        student_names_list = ["-- 학생 선택 --"] + sorted(list(students_map.values()))
+                        selected_student_name = st.selectbox("분석할 학생을 선택하세요:", student_names_list)
+
+                        if selected_student_name != "-- 학생 선택 --":
+                            # 선택된 학생 ID 찾기
+                            selected_student_id = next((sid for sid, name in students_map.items() if name == selected_student_name), None)
+
+                            if selected_student_id:
+                                if st.button(f"'{selected_student_name}' 학생 프로파일 생성하기", key="generate_profile"):
+                                    with st.spinner(f"{selected_student_name} 학생의 관계 데이터를 분석 중입니다..."):
+                                        # --- !!! 데이터 집계 로직 필요 !!! ---
+                                        # 1. 선택된 학생의 응답 데이터 찾기
+                                        student_response_row = analysis_df[analysis_df['submitter_id'] == selected_student_id]
+                                        if not student_response_row.empty:
+                                            my_ratings_data = student_response_row.iloc[0].get('parsed_relations', {})
+                                            my_praise = student_response_row.iloc[0].get('praise_friend')
+                                            my_praise_reason = student_response_row.iloc[0].get('praise_reason')
+                                            my_difficult = student_response_row.iloc[0].get('difficult_friend')
+                                            my_difficult_reason = student_response_row.iloc[0].get('difficult_reason')
+                                            # ... 기타 필요한 정보
+                                        else:
+                                            my_ratings_data, my_praise, my_praise_reason, my_difficult, my_difficult_reason = {}, None, None, None, None
+
+                                        # 2. 선택된 학생이 받은 점수 정보 (avg_df 활용 - 이전 탭에서 계산됨)
+                                        received_avg_info = avg_df[avg_df['student_id'] == selected_student_id]
+                                        if not received_avg_info.empty:
+                                            avg_score = received_avg_info.iloc[0].get('average_score')
+                                            received_count = received_avg_info.iloc[0].get('received_count')
+                                        else:
+                                            avg_score, received_count = None, 0
+
+                                        # 3. 누가 이 학생을 칭찬/어렵다고 했는지 찾기 (analysis_df 전체 순회 필요)
+                                        praised_by = analysis_df[analysis_df['praise_friend'] == selected_student_name]['submitter_name'].tolist()
+                                        difficult_by = analysis_df[analysis_df['difficult_friend'] == selected_student_name]['submitter_name'].tolist()
+                                        # (이유도 함께 가져오려면 로직 추가)
+
+                                        # --- 프롬프트 구성 ---
+                                        prompt = f"""
+                                        다음은 '{selected_student_name}' 학생의 교우관계 데이터입니다.
+
+                                        1.  '{selected_student_name}' 학생이 다른 친구들에게 준 친밀도 점수: {json.dumps(my_ratings_data, ensure_ascii=False)} (0: 매우 어려움, 100: 매우 친함)
+                                        2.  다른 친구들이 '{selected_student_name}' 학생에게 준 평균 친밀도 점수: {f'{avg_score:.1f}점' if avg_score is not None else '데이터 없음'} ({received_count}명 평가)
+                                        3.  '{selected_student_name}' 학생이 칭찬한 친구: {my_praise or '없음'} (이유: {my_praise_reason or '없음'})
+                                        4.  '{selected_student_name}' 학생을 칭찬한 친구 목록: {', '.join(praised_by) or '없음'}
+                                        5.  '{selected_student_name}' 학생이 어렵다고 한 친구: {my_difficult or '없음'} (이유: {my_difficult_reason or '없음'})
+                                        6.  '{selected_student_name}' 학생을 어렵다고 한 친구 목록: {', '.join(difficult_by) or '없음'}
+
+                                        위 정보를 종합하여 '{selected_student_name}' 학생의 학급 내 교우관계 특징, 사회성(예: 관계 주도성, 수용성), 긍정적/부정적 관계 양상, 그리고 교사가 관심을 가져야 할 부분(잠재적 강점 또는 어려움)에 대해 구체적으로 분석하고 해석해주세요. 교사가 학생 상담 및 지도에 참고할 수 있도록 상세하고 통찰력 있는 내용을 한국어로 작성해주세요.
+                                        """
+
+                                        # --- AI 호출 및 결과 표시 ---
+                                        profile_result = call_gemini(prompt, api_key) # utils 사용 가정
+                                        st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
+                                        st.info(profile_result) # 또는 st.text_area
+
+                            else:
+                                st.warning("학생을 선택해주세요.")
+                    else:
+                        st.info("분석할 학생 정보가 없습니다.")
+                elif analysis_option == "학급 전체 관계 요약 (준비중)":
+                    st.info("감성 분석 기능은 준비 중입니다.")
+                    # 여기에 감성 분석 로직 추가 (difficult_reason 컬럼 사용)
+
+                elif analysis_option == "주요 키워드 추출 (준비중)":
+                    st.info("키워드 추출 기능은 준비 중입니다.")
+                    # 여기에 키워드 추출 로직 추가 (여러 텍스트 컬럼 활용 가능)
+
+                # 다른 분석 옵션 추가 가능...
 
             else:
-                # API 키가 없을 때 안내 메시지 및 설정 페이지 링크 표시
+                # API 키가 없을 때 안내 메시지 (기존과 동일)
                 st.warning("⚠️ AI 기반 분석 기능을 사용하려면 Gemini API 키가 필요합니다.")
                 st.markdown("""
                     API 키를 입력하면 학생들의 서술형 응답에 대한 자동 요약, 주요 키워드 추출,
@@ -288,8 +399,10 @@ if selected_class_id and selected_survey_id:
                     API 키는 **왼쪽 사이드바의 '⚙️ 설정' 메뉴**에서 입력할 수 있습니다.
                     키 발급은 [Google AI Studio](https://aistudio.google.com/app/apikey)에서 가능합니다.
                 """)
-                # 설정 페이지로 바로 이동하는 링크 (선택 사항)
-                st.page_link("pages/4_⚙️_설정.py", label="설정 페이지로 이동하여 API 키 입력하기", icon="⚙️")
+                if st.button("설정 페이지로 이동", key="go_to_settings"):
+                     st.switch_page("pages/4_⚙️_설정.py") # 페이지 이동 버튼 (Streamlit 1.28 이상)
+
+    # ... (데이터 로드 실패 시 등 나머지 코드) ...
 
     else:
         # 데이터 로드 실패 시 (load_analysis_data 함수 내에서 이미 경고/오류 표시됨)
