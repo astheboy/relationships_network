@@ -231,6 +231,99 @@ if selected_class_id and selected_survey_id:
                 lowest = avg_df.iloc[-1]
                 st.write(f"🌟 가장 높은 평균 점수를 받은 학생: **{highest['student_name']}** ({highest['average_score']:.1f}점, {highest['received_count']}회)")
                 st.write(f"😟 가장 낮은 평균 점수를 받은 학생: **{lowest['student_name']}** ({lowest['average_score']:.1f}점, {lowest['received_count']}회)")
+            st.divider() # 구분선 추가
+
+            # --- 2. 준 친밀도 점수 분석 (새로 추가) ---
+            st.subheader("학생별 평균 준 친밀도 점수")
+
+            # 함수: 각 학생이 '준' 점수들의 평균과 목록 계산
+            @st.cache_data # 계산 결과를 캐싱하여 성능 향상
+            def calculate_given_scores(df, student_map, id_col='submitter_id', name_col='submitter_name', relations_col='parsed_relations'):
+                given_scores_list = []
+                # submitter_id 기준으로 순회 (한 학생당 한 번만 계산)
+                for submitter_id, group in df.groupby(id_col):
+                    submitter_name = student_map.get(submitter_id, "알 수 없음")
+                    # 해당 학생의 모든 응답 중 첫 번째 응답의 관계 데이터 사용 (보통 학생당 응답은 하나)
+                    row = group.iloc[0]
+                    relations = row.get(relations_col, {})
+                    scores_given = []
+
+                    # 유효한 관계 데이터(dict)인지, 내용은 있는지 확인
+                    if isinstance(relations, dict) and relations:
+                        for target_id, info in relations.items():
+                            score = info.get('intimacy')
+                            # 점수가 숫자 타입인지 확인
+                            if isinstance(score, (int, float)):
+                                scores_given.append(score)
+
+                    if scores_given: # 준 점수가 하나라도 있을 경우
+                        avg_given = sum(scores_given) / len(scores_given)
+                        given_scores_list.append({
+                            'submitter_id': submitter_id,
+                            'submitter_name': submitter_name,
+                            'average_score_given': avg_given,
+                            'rated_count': len(scores_given), # 몇 명에게 점수를 매겼는지
+                            'scores_list': scores_given # 분포 분석용 점수 목록
+                        })
+                if not given_scores_list: # 계산된 결과가 없으면 빈 DataFrame 반환
+                    return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
+                return pd.DataFrame(given_scores_list)
+
+            # 계산 실행
+            avg_given_df = calculate_given_scores(analysis_df, students_map)
+
+            if not avg_given_df.empty:
+                # 평균 준 점수 기준 정렬
+                avg_given_df = avg_given_df.sort_values(by='average_score_given', ascending=False)
+
+                # 시각화: 평균 준 점수 막대 그래프
+                fig_given = px.bar(avg_given_df,
+                                   x='submitter_name',
+                                   y='average_score_given',
+                                   title="평균 '준' 친밀도 점수 (높을수록 다른 친구를 긍정적으로 평가)",
+                                   labels={'submitter_name':'학생 이름', 'average_score_given':'평균 준 점수'},
+                                   hover_data=['rated_count'], # 마우스 올리면 평가한 친구 수 표시
+                                   color='average_score_given', # 점수에 따라 색상 변화
+                                   color_continuous_scale=px.colors.sequential.Plasma_r) # 다른 색상 스케일 사용
+                fig_given.update_layout(yaxis_range=[0,100]) # Y축 범위 0-100 고정
+                st.plotly_chart(fig_given, use_container_width=True)
+
+                # 간단 분석 요약
+                try: # 데이터가 1개만 있을 경우 iloc[-1] 오류 방지
+                    highest_giver = avg_given_df.iloc[0]
+                    lowest_giver = avg_given_df.iloc[-1]
+                    st.write(f"👍 다른 친구들에게 가장 높은 평균 점수를 준 학생: **{highest_giver['submitter_name']}** ({highest_giver['average_score_given']:.1f}점, {highest_giver['rated_count']}명 평가)")
+                    st.write(f"🤔 다른 친구들에게 가장 낮은 평균 점수를 준 학생: **{lowest_giver['submitter_name']}** ({lowest_giver['average_score_given']:.1f}점, {lowest_giver['rated_count']}명 평가)")
+                except IndexError:
+                     st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
+
+
+                # --- (선택 사항) 개인별 준 점수 분포 시각화 ---
+                st.markdown("---")
+                st.subheader("개인별 '준' 점수 분포 확인")
+                # 학생 이름 목록 생성 (submitter_name 사용)
+                student_names_for_given = ["-- 학생 선택 --"] + sorted(avg_given_df['submitter_name'].unique())
+                student_to_view = st.selectbox(
+                    "점수 분포를 확인할 학생 선택:",
+                    options=student_names_for_given,
+                    key="given_score_dist_select"
+                )
+
+                if student_to_view != "-- 학생 선택 --":
+                    # 선택된 학생의 'scores_list' 가져오기
+                    student_data_row = avg_given_df[avg_given_df['submitter_name'] == student_to_view]
+                    if not student_data_row.empty:
+                        scores = student_data_row.iloc[0]['scores_list']
+                        if scores: # 점수 목록이 비어있지 않으면
+                            fig_dist = px.histogram(pd.DataFrame({'점수': scores}), x='점수', nbins=10, # 10개 구간으로
+                                                    title=f"'{student_to_view}' 학생이 다른 친구들에게 준 점수 분포",
+                                                    range_x=[0, 100]) # X축 범위 0-100 고정
+                            fig_dist.update_layout(bargap=0.1)
+                            st.plotly_chart(fig_dist, use_container_width=True)
+                        else:
+                            st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
+                    else:
+                         st.warning("선택한 학생 데이터를 찾을 수 없습니다.")
             else:
                 st.write("받은 친밀도 점수 데이터가 부족하여 분석할 수 없습니다.")
             st.write("기본 관계 분석 내용 표시")
@@ -250,15 +343,7 @@ if selected_class_id and selected_survey_id:
             # text_columns = [...]
             # st.dataframe(analysis_df[available_text_columns])
 
-        # with tab3:
-        #     st.header("원본 데이터 보기")
-        #     # --- !!! 여기에 전체 원본 DataFrame 표시 코드 !!! ---
-        #     st.dataframe(analysis_df, use_container_width=True)
-        #     st.caption("`parsed_relations` 열에서 각 학생이 다른 학생들에게 매긴 친밀도 점수를 확인할 수 있습니다.")
-        #     st.write("원본 데이터 테이블 표시")
-        #     # st.dataframe(analysis_df)
 
-        # --- AI 심층 분석 탭 (조건부 내용 표시) ---
 
         with tab3:
             st.header("✨ AI 기반 심층 분석 (Gemini)")
