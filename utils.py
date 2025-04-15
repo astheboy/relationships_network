@@ -8,7 +8,7 @@ def call_gemini(prompt, api_key):
     try:
         # 함수 호출 시마다 API 키로 클라이언트 설정
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-pro') # 사용할 모델 선택
+        model = genai.GenerativeModel('gemini-2.0-flash-lite') # 사용할 모델 선택
 
         # API 호출 (안전 설정 등 추가 가능)
         response = model.generate_content(prompt)
