@@ -352,60 +352,8 @@ if selected_class_id and selected_survey_id:
                         """)
                     except Exception as stat_e:
                         st.warning(f"통계 계산 중 오류: {stat_e}")
+                # --- 4. 관계 상호성 분석 (새로 추가) ---
                 st.markdown("---")        
-                st.subheader("개인별 '준' 점수 분포 확인")
-                # 학생 이름 목록 생성 (submitter_name 사용)
-                # 학생 이름 목록 생성 (avg_given_df에서 가져옴 - 이전 단계에서 생성됨)
-                if not avg_given_df.empty:
-                    student_names_for_given = ["-- 학생 선택 --"] + sorted(avg_given_df['submitter_name'].unique())
-                    student_to_view = st.selectbox(
-                        "점수 내역을 확인할 학생 선택:", # 레이블 약간 변경
-                        options=student_names_for_given,
-                        key="given_score_detail_select" # 키 변경
-                    )
-
-                    if student_to_view != "-- 학생 선택 --":
-                        # --- !!! 선택된 학생의 'parsed_relations' 데이터 추출 및 변환 !!! ---
-                        # analysis_df에서 해당 학생의 행 찾기
-                        student_data_row = analysis_df[analysis_df['submitter_name'] == student_to_view]
-
-                        if not student_data_row.empty:
-                            relations_dict = student_data_row.iloc[0].get('parsed_relations', {})
-                            individual_ratings = [] # 막대 그래프용 데이터 리스트
-
-                            if isinstance(relations_dict, dict) and relations_dict:
-                                for classmate_id, info in relations_dict.items():
-                                    score = info.get('intimacy')
-                                    if isinstance(score, (int, float)):
-                                        # students_map (ID->이름 맵)을 사용하여 이름 가져오기
-                                        classmate_name = students_map.get(classmate_id, f"ID:{classmate_id[:4]}...")
-                                        individual_ratings.append({"평가 대상 학생": classmate_name, "내가 준 점수": score})
-
-                            if individual_ratings:
-                                # --- !!! 데이터프레임 생성 및 막대 그래프 그리기 !!! ---
-                                ratings_df = pd.DataFrame(individual_ratings)
-                                # 점수 기준으로 정렬 (높은 점수 -> 낮은 점수)
-                                ratings_df = ratings_df.sort_values(by="내가 준 점수", ascending=False)
-
-                                fig_individual_bar = px.bar(
-                                    ratings_df,
-                                    x="평가 대상 학생",   # X축: 친구 이름
-                                    y="내가 준 점수",    # Y축: 해당 친구에게 준 점수
-                                    title=f"'{student_to_view}' 학생이 다른 친구들에게 준 점수",
-                                    labels={"평가 대상 학생": "친구 이름", "내가 준 점수": "친밀도 점수"},
-                                    range_y=[0, 100],      # Y축 범위 0-100 고정
-                                    color="내가 준 점수",  # 점수에 따라 색상 지정
-                                    color_continuous_scale=px.colors.sequential.Viridis_r # 색상 스케일
-                                )
-                                # X축 레이블 정렬 (점수 높은 순)
-                                fig_individual_bar.update_layout(xaxis={'categoryorder':'total descending'})
-                                st.plotly_chart(fig_individual_bar, use_container_width=True)
-                                # --- !!! 히스토그램 코드를 이 막대 그래프 코드로 대체 !!! ---
-                            else:
-                                st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
-                        else:
-                             st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우     
-                        # --- 4. 관계 상호성 분석 (새로 추가) ---
                 st.subheader("관계 상호성 분석 (Reciprocity)")
 
                 # 함수: 상호 평가 점수 계산 및 관계 유형 분류
@@ -505,6 +453,60 @@ if selected_class_id and selected_survey_id:
                 else:
                     st.write("상호 평가 데이터가 부족하여 관계 상호성 분석을 할 수 없습니다.")
                     st.caption("학생들이 서로에 대해 충분히 평가해야 이 분석이 가능합니다.")        
+                st.markdown("---")        
+                st.subheader("개인별 '준' 점수 분포 확인")
+                # 학생 이름 목록 생성 (submitter_name 사용)
+                # 학생 이름 목록 생성 (avg_given_df에서 가져옴 - 이전 단계에서 생성됨)
+                if not avg_given_df.empty:
+                    student_names_for_given = ["-- 학생 선택 --"] + sorted(avg_given_df['submitter_name'].unique())
+                    student_to_view = st.selectbox(
+                        "점수 내역을 확인할 학생 선택:", # 레이블 약간 변경
+                        options=student_names_for_given,
+                        key="given_score_detail_select" # 키 변경
+                    )
+
+                    if student_to_view != "-- 학생 선택 --":
+                        # --- !!! 선택된 학생의 'parsed_relations' 데이터 추출 및 변환 !!! ---
+                        # analysis_df에서 해당 학생의 행 찾기
+                        student_data_row = analysis_df[analysis_df['submitter_name'] == student_to_view]
+
+                        if not student_data_row.empty:
+                            relations_dict = student_data_row.iloc[0].get('parsed_relations', {})
+                            individual_ratings = [] # 막대 그래프용 데이터 리스트
+
+                            if isinstance(relations_dict, dict) and relations_dict:
+                                for classmate_id, info in relations_dict.items():
+                                    score = info.get('intimacy')
+                                    if isinstance(score, (int, float)):
+                                        # students_map (ID->이름 맵)을 사용하여 이름 가져오기
+                                        classmate_name = students_map.get(classmate_id, f"ID:{classmate_id[:4]}...")
+                                        individual_ratings.append({"평가 대상 학생": classmate_name, "내가 준 점수": score})
+
+                            if individual_ratings:
+                                # --- !!! 데이터프레임 생성 및 막대 그래프 그리기 !!! ---
+                                ratings_df = pd.DataFrame(individual_ratings)
+                                # 점수 기준으로 정렬 (높은 점수 -> 낮은 점수)
+                                ratings_df = ratings_df.sort_values(by="내가 준 점수", ascending=False)
+
+                                fig_individual_bar = px.bar(
+                                    ratings_df,
+                                    x="평가 대상 학생",   # X축: 친구 이름
+                                    y="내가 준 점수",    # Y축: 해당 친구에게 준 점수
+                                    title=f"'{student_to_view}' 학생이 다른 친구들에게 준 점수",
+                                    labels={"평가 대상 학생": "친구 이름", "내가 준 점수": "친밀도 점수"},
+                                    range_y=[0, 100],      # Y축 범위 0-100 고정
+                                    color="내가 준 점수",  # 점수에 따라 색상 지정
+                                    color_continuous_scale=px.colors.sequential.Viridis_r # 색상 스케일
+                                )
+                                # X축 레이블 정렬 (점수 높은 순)
+                                fig_individual_bar.update_layout(xaxis={'categoryorder':'total descending'})
+                                st.plotly_chart(fig_individual_bar, use_container_width=True)
+                                # --- !!! 히스토그램 코드를 이 막대 그래프 코드로 대체 !!! ---
+                            else:
+                                st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
+                        else:
+                             st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우     
+        
             else:
                 st.write("받은 친밀도 점수 데이터가 부족하여 분석할 수 없습니다.")
             st.write("기본 관계 분석 내용 표시")
