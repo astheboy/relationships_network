@@ -328,60 +328,9 @@ if selected_class_id and selected_survey_id:
                             selected_student_id = next((sid for sid, name in students_map.items() if name == selected_student_name), None)
 
                             if selected_student_id:
-                            #     if st.button(f"'{selected_student_name}' 학생 프로파일 생성하기", key="generate_profile"):
-                            #         with st.spinner(f"{selected_student_name} 학생의 관계 데이터를 분석 중입니다..."):
-                            #             # --- !!! 데이터 집계 로직 필요 !!! ---
-                            #             # 1. 선택된 학생의 응답 데이터 찾기
-                            #             student_response_row = analysis_df[analysis_df['submitter_id'] == selected_student_id]
-                            #             if not student_response_row.empty:
-                            #                 my_ratings_data = student_response_row.iloc[0].get('parsed_relations', {})
-                            #                 my_praise = student_response_row.iloc[0].get('praise_friend')
-                            #                 my_praise_reason = student_response_row.iloc[0].get('praise_reason')
-                            #                 my_difficult = student_response_row.iloc[0].get('difficult_friend')
-                            #                 my_difficult_reason = student_response_row.iloc[0].get('difficult_reason')
-                            #                 # ... 기타 필요한 정보
-                            #             else:
-                            #                 my_ratings_data, my_praise, my_praise_reason, my_difficult, my_difficult_reason = {}, None, None, None, None
-
-                            #             # 2. 선택된 학생이 받은 점수 정보 (avg_df 활용 - 이전 탭에서 계산됨)
-                            #             received_avg_info = avg_df[avg_df['student_id'] == selected_student_id]
-                            #             if not received_avg_info.empty:
-                            #                 avg_score = received_avg_info.iloc[0].get('average_score')
-                            #                 received_count = received_avg_info.iloc[0].get('received_count')
-                            #             else:
-                            #                 avg_score, received_count = None, 0
-
-                            #             # 3. 누가 이 학생을 칭찬/어렵다고 했는지 찾기 (analysis_df 전체 순회 필요)
-                            #             praised_by = analysis_df[analysis_df['praise_friend'] == selected_student_name]['submitter_name'].tolist()
-                            #             difficult_by = analysis_df[analysis_df['difficult_friend'] == selected_student_name]['submitter_name'].tolist()
-                            #             # (이유도 함께 가져오려면 로직 추가)
-
-                            #             # --- 프롬프트 구성 ---
-                            #             prompt = f"""
-                            #             다음은 '{selected_student_name}' 학생의 교우관계 데이터입니다.
-
-                            #             1.  '{selected_student_name}' 학생이 다른 친구들에게 준 친밀도 점수: {json.dumps(my_ratings_data, ensure_ascii=False)} (0: 매우 어려움, 100: 매우 친함)
-                            #             2.  다른 친구들이 '{selected_student_name}' 학생에게 준 평균 친밀도 점수: {f'{avg_score:.1f}점' if avg_score is not None else '데이터 없음'} ({received_count}명 평가)
-                            #             3.  '{selected_student_name}' 학생이 칭찬한 친구: {my_praise or '없음'} (이유: {my_praise_reason or '없음'})
-                            #             4.  '{selected_student_name}' 학생을 칭찬한 친구 목록: {', '.join(praised_by) or '없음'}
-                            #             5.  '{selected_student_name}' 학생이 어렵다고 한 친구: {my_difficult or '없음'} (이유: {my_difficult_reason or '없음'})
-                            #             6.  '{selected_student_name}' 학생을 어렵다고 한 친구 목록: {', '.join(difficult_by) or '없음'}
-
-                            #             위 정보를 종합하여 '{selected_student_name}' 학생의 학급 내 교우관계 특징, 사회성(예: 관계 주도성, 수용성), 긍정적/부정적 관계 양상, 그리고 교사가 관심을 가져야 할 부분(잠재적 강점 또는 어려움)에 대해 구체적으로 분석하고 해석해주세요. 교사가 학생 상담 및 지도에 참고할 수 있도록 상세하고 통찰력 있는 내용을 한국어로 작성해주세요.
-                            #             """
-
-                            #             # --- AI 호출 및 결과 표시 ---
-                            #             profile_result = call_gemini(prompt, api_key) # utils 사용 가정
-                            #             st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
-                            #             st.info(profile_result) # 또는 st.text_area
                                 if st.button(f"'{selected_student_name}' 학생 프로파일 생성하기", key="generate_profile"):
                                     with st.spinner(f"{selected_student_name} 학생의 관계 데이터를 분석 중입니다..."):
-                                        # --- !!! 데이터 집계 로직 (기존) !!! ---
-                                        # (선택된 학생의 응답 데이터, 받은 평균 점수, 칭찬/어려움 관련 ID 목록 등을 가져오는 로직)
-                                        # 예시 변수: my_ratings_data, avg_score, received_count, my_praise, my_praise_reason,
-                                        #          my_difficult, my_difficult_reason, praised_by (ID list), difficult_by (ID list)
-                                        # 그리고 students_map = {student_id: student_name} 이 필요합니다.
-                                        # ... (데이터 집계 코드 위치) ...
+
                                         # 1. 선택된 학생의 응답 데이터 찾기
                                         student_response_row = analysis_df[analysis_df['submitter_id'] == selected_student_id]
                                         if not student_response_row.empty:
@@ -438,9 +387,9 @@ if selected_class_id and selected_survey_id:
 
                                         위 정보를 종합하여 '{selected_student_name}' 학생의 학급 내 교우관계 특징, 사회성(예: 관계 주도성, 수용성), 긍정적/부정적 관계 양상, 그리고 교사가 관심을 가져야 할 부분(잠재적 강점 또는 어려움)에 대해 구체적으로 분석하고 해석해주세요. 분석 결과에는 학생 ID가 아닌 학생 이름만 포함하여 한국어로 작성해주세요.
                                         """
-                                        st.write("--- DEBUG: Generated Prompt ---") # 프롬프트 확인용 (선택 사항)
-                                        st.text(prompt)
-                                        st.write("--- END DEBUG ---")
+                                        # st.write("--- DEBUG: Generated Prompt ---") # 프롬프트 확인용 (선택 사항)
+                                        # st.text(prompt)
+                                        # st.write("--- END DEBUG ---")
 
                                         # --- AI 호출 및 결과 표시 ---
                                         profile_result = call_gemini(prompt, api_key) # utils 사용 가정
