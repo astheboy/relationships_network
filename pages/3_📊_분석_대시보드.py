@@ -727,44 +727,6 @@ if selected_class_id and selected_survey_id:
                                         profile_result = call_gemini(prompt, api_key) # utils 사용 가정
                                         st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
                                         st.info(profile_result) # 또는 st.text_area
-                                        if profile_result and not profile_result.startswith("오류:"):
-                                            st.markdown("---")
-                                            st.subheader("📄 분석 결과 저장/출력")
-
-                                            # PDF 다운로드 버튼
-                                            try:
-                                                # PDF 데이터 생성 시도
-                                                pdf_data = create_pdf(profile_result, f"{selected_survey_name} - AI 분석 결과")
-
-                                                if pdf_data: # PDF 생성 성공 시에만 버튼 활성화
-                                                    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-                                                    pdf_filename = f"AI_분석결과_{selected_class_name}_{selected_survey_name}_{current_time}.pdf"
-
-                                                    st.download_button(
-                                                        label="PDF로 저장하기",
-                                                        data=pdf_data,
-                                                        file_name=pdf_filename,
-                                                        mime="application/pdf"
-                                                    )
-                                                else:
-                                                    # create_pdf 함수 내부에서 오류 메시지가 이미 표시되었을 것임
-                                                    st.warning("PDF 생성에 실패하여 다운로드 버튼을 비활성화합니다.")
-
-                                            except Exception as pdf_e:
-                                                st.error(f"PDF 다운로드 버튼 생성 중 오류: {pdf_e}")
-
-                                else:
-                                    # API 키가 없을 때 안내 메시지 (기존과 동일)
-                                    st.warning("⚠️ AI 기반 분석 기능을 사용하려면 Gemini API 키가 필요합니다.")
-                                    st.markdown("""
-                                        API 키를 입력하면 학생들의 서술형 응답에 대한 자동 요약, 주요 키워드 추출,
-                                        관계 패턴에 대한 심층적인 해석 등 추가적인 분석 결과를 얻을 수 있습니다.
-
-                                        API 키는 **왼쪽 사이드바의 '⚙️ 설정' 메뉴**에서 입력할 수 있습니다.
-                                        키 발급은 [Google AI Studio](https://aistudio.google.com/app/apikey)에서 가능합니다.
-                                    """)
-                                    if st.button("설정 페이지로 이동", key="go_to_settings"):
-                                        st.switch_page("pages/4_⚙️_설정.py") # 페이지 이동 버튼 (Streamlit 1.28 이상)
                             else:
                                 st.warning("학생을 선택해주세요.")
                     else:
