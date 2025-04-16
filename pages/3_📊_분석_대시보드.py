@@ -721,20 +721,27 @@ if selected_class_id and selected_survey_id:
                                             try:
                                                 # PDF 데이터 생성 시도
                                                 pdf_data = create_pdf(profile_result, f"{selected_survey_name} - AI 분석 결과")
+                                                if pdf_data: # create_pdf가 bytearray 또는 bytes를 성공적으로 반환 시
+                                                    # --- !!! bytearray를 bytes로 변환 !!! ---
+                                                    try:
+                                                        pdf_bytes_for_button = bytes(pdf_data) # 타입 변환 시도
+                                                    except Exception as convert_e:
+                                                        st.error(f"PDF 데이터 형식 변환 오류: {convert_e}")
+                                                        pdf_bytes_for_button = None # 변환 실패 시 None
+                                                    # -----------------------------------------
+                                                    if pdf_bytes_for_button: # PDF 생성 성공 시에만 버튼 활성화
+                                                        current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M")
+                                                        pdf_filename = f"AI_분석결과_{selected_class_name}_{selected_survey_name}_{current_time}.pdf"
 
-                                                if pdf_data: # PDF 생성 성공 시에만 버튼 활성화
-                                                    current_time = datetime.datetime.now().strftime("%Y%m%d_%H%M")
-                                                    pdf_filename = f"AI_분석결과_{selected_class_name}_{selected_survey_name}_{current_time}.pdf"
-
-                                                    st.download_button(
-                                                        label="PDF로 저장하기",
-                                                        data=pdf_data,
-                                                        file_name=pdf_filename,
-                                                        mime="application/pdf"
-                                                    )
-                                                else:
-                                                    # create_pdf 함수 내부에서 오류 메시지가 이미 표시되었을 것임
-                                                    st.warning("PDF 생성에 실패하여 다운로드 버튼을 비활성화합니다.")
+                                                        st.download_button(
+                                                            label="PDF로 저장하기",
+                                                            data=pdf_data,
+                                                            file_name=pdf_filename,
+                                                            mime="application/pdf"
+                                                        )
+                                                # else:
+                                                #     # create_pdf 함수 내부에서 오류 메시지가 이미 표시되었을 것임
+                                                #     st.warning("PDF 생성에 실패하여 다운로드 버튼을 비활성화합니다.")
 
                                             except Exception as pdf_e:
                                                 st.error(f"PDF 다운로드 버튼 생성 중 오류: {pdf_e}")
