@@ -9,7 +9,8 @@ from utils import call_gemini
 import itertools
 from fpdf import FPDF        # PDF 생성을 위해 추가
 from io import BytesIO      # 메모리 버퍼 사용 위해 추가
-import datetime   
+import datetime
+import traceback   
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="분석 대시보드", page_icon="📊", layout="wide")
@@ -64,61 +65,53 @@ def create_pdf(text_content, title="AI 분석 결과"):
     pdf = FPDF()
     pdf.add_page()
 
-    # 한글 폰트 추가 (프로젝트 내 폰트 파일 경로 지정)
-    # 예시: 프로젝트 루트에 fonts 폴더 만들고 그 안에 NanumGothicCoding.ttf 넣은 경우
+    # 한글 폰트 추가 (파일 경로는 실제 위치에 맞게!)
     try:
-        # 'uni=True'는 유니코드(UTF-8) 지원을 위해 필요
-        pdf.add_font('NanumGothic', '', 'fonts/NanumGothicCoding.ttf', uni=True)
-        pdf.set_font('NanumGothic', size=16) # 기본 폰트 설정
+        font_path = 'fonts/NanumGothicCoding.ttf' # 폰트 파일 경로
+        pdf.add_font('NanumGothic', '', font_path, uni=True)
+        pdf.set_font('NanumGothic', size=16) # 제목용 폰트 설정
     except RuntimeError as e:
-         # 폰트 파일 못찾는 경우 등 오류 처리
-         st.error(f"PDF 생성 오류: 폰트 파일을 찾을 수 없습니다. (fonts/NanumGothicCoding.ttf 확인 필요) - {e}")
-         # 폰트 로딩 실패 시 None 반환하여 다운로드 버튼 비활성화 유도 가능
-         return None
+        st.error(f"PDF 오류: 폰트 파일을 찾을 수 없습니다. 경로: '{font_path}' - {e}")
+        return None
     except Exception as e:
-         st.error(f"PDF 생성 중 폰트 오류 발생: {e}")
-         return None
+        st.error(f"PDF 오류: 폰트 설정 중 오류: {e}")
+        return None
 
     # 제목 추가
-    pdf.cell(200, 10, txt=title, ln=1, align='C')
+    try:
+        # 제목은 한글이므로 UTF-8 인코딩 후 디코딩 시도 (또는 직접)
+        pdf.cell(0, 10, txt=title, ln=1, align='C') # 직접 사용 시도
+    except UnicodeEncodeError:
+        pdf.cell(0, 10, txt=title.encode('utf-8').decode('latin-1'), ln=1, align='C') # 이전 방식
+    except Exception as e:
+         st.error(f"PDF 제목 쓰기 오류: {e}")
+         return None
     pdf.ln(10) # 줄바꿈
 
-    # 본문 내용 추가 (한글 처리 위해 UTF-8 인코딩된 문자열 필요)
-    pdf.set_font('NanumGothic', size=10)
-    # multi_cell은 자동 줄바꿈 지원
-    # FPDF는 기본적으로 Latin-1 인코딩 사용, 한글 위해 UTF-8 인코딩된 바이트로 변환 시도
+    # 본문 내용 추가
+    pdf.set_font('NanumGothic', size=10) # 본문용 폰트 설정
     try:
-         # 텍스트를 UTF-8로 인코딩 후 Latin-1로 디코딩하는 일반적인 fpdf2 한글 처리 방식
-         # 참고: fpdf2 최신 버전에서는 UTF-8 직접 지원이 개선되었을 수 있음
-         encoded_text = text_content.encode('utf-8').decode('latin-1')
-         pdf.multi_cell(0, 5, txt=encoded_text)
-    except UnicodeDecodeError:
-         # 위 방식 실패 시, 텍스트를 직접 넣어보기 (라이브러리 버전에 따라 동작 가능)
-         try:
-              pdf.multi_cell(0, 5, txt=text_content)
-         except Exception as e_inner:
-              st.error(f"PDF 내용 쓰기 오류: {e_inner}")
-              return None # 오류 시 None 반환
-    except Exception as e_outer:
-         st.error(f"PDF 내용 인코딩 오류: {e_outer}")
-         return None
+        # uni=True 폰트 사용 시 UTF-8 문자열 직접 사용 가능해야 함
+        pdf.multi_cell(0, 5, txt=text_content)
+    except UnicodeEncodeError: # 혹시 모를 인코딩 오류 대비
+         pdf.multi_cell(0, 5, txt=text_content.encode('utf-8').decode('latin-1'))
+    except Exception as e:
+        st.error(f"PDF 내용 쓰기 오류: {e}")
+        return None
 
-    # PDF 데이터를 바이트 형태로 반환
+    # PDF 데이터를 바이트 형태로 반환 (수정된 부분)
     try:
-         # pdf.output()은 기본적으로 파일로 저장하려 함.
-         # 메모리 버퍼에 저장하려면 다른 방식 필요하거나, 임시 파일 사용 필요.
-         # fpdf2 최신 버전은 pdf.output(dest='S') 로 바이트 반환 가능성 확인 필요
-         # 여기서는 임시 파일 방식 대신 BytesIO 사용 시도 (라이브러리 지원 여부 확인 필요)
-         # 또는 가장 간단하게는 파일로 저장 후 읽는 방식 사용 가능
-         # 여기서는 dest='S' 방식이 동작한다고 가정 (fpdf2 버전 확인 필요)
-         pdf_bytes = pdf.output(dest='S').encode('latin-1') # 바이트 객체 얻기
-         return pdf_bytes
-    except AttributeError: # dest='S' 미지원 시
-         st.error("사용 중인 fpdf2 버전에서 메모리 출력을 지원하지 않을 수 있습니다. 라이브러리를 업데이트하거나 다른 방식을 사용하세요.")
-         return None
+        # 최신 fpdf2는 파일 경로 없이 output() 호출 시 bytes 반환
+        pdf_bytes = pdf.output()
+        # 반환값이 bytes 타입인지 확인 (검증 강화)
+        if not isinstance(pdf_bytes, bytes):
+             raise TypeError(f"pdf.output() did not return bytes (returned {type(pdf_bytes)}). Check fpdf2 version.")
+        return pdf_bytes
     except Exception as e_output:
-         st.error(f"PDF 출력 중 오류: {e_output}")
-         return None
+        st.error(f"PDF 데이터 생성(출력) 중 오류: {e_output}")
+        print("PDF Output Error Traceback:") # 콘솔에 상세 오류 출력
+        traceback.print_exc()
+        return None
 
 st.title(f"📊 {teacher_name}의 분석 대시보드")
 st.write("학급과 설문 회차를 선택하여 결과를 분석하고 시각화합니다.")
