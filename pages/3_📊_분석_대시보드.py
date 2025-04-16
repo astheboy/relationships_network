@@ -677,10 +677,10 @@ if selected_class_id and selected_survey_id:
                                                 generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M') # 시간 포맷 변경
                                                 st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
                                                 st.info(cached_result) # 캐시된 결과 바로 표시
-                                        # else:
-                                        #     # execute() 자체가 None 반환 또는 실패 시
-                                        #     st.warning("캐시된 결과를 조회하는 중 문제가 발생했습니다 (응답 객체 없음). AI 분석을 새로 실행합니다.")
-                                        #     print("Supabase cache query execute() returned None or failed.")
+                                        else:
+                                            # execute() 자체가 None 반환 또는 실패 시
+                                            st.warning("캐시된 결과를 조회하는 중 문제가 발생했습니다 (응답 객체 없음). AI 분석을 새로 실행합니다.")
+                                            print("Supabase cache query execute() returned None or failed.")
                                     except Exception as exec_e_cache:
                                         st.warning(f"캐시 조회 쿼리 실행 오류: {exec_e_cache}")
                                         cache_response = None # 오류 시 None 처리
@@ -809,6 +809,8 @@ if selected_class_id and selected_survey_id:
                                                 # upsert 성공 여부 확인 (API v2에서는 data가 없을 수 있음)
                                                 if not hasattr(upsert_response, 'error') or upsert_response.error is None:
                                                     st.success("✅ 분석 결과가 데이터베이스에 저장/업데이트되었습니다.")
+                                                    st.session_state[session_key_comment] = teacher_comment_input
+                                                    st.rerun() # 저장 상태 반영 위해 새로고침
                                                 else:
                                                     st.warning(f"분석 결과를 DB에 저장하는 중 오류 발생: {upsert_response.error}")
 
