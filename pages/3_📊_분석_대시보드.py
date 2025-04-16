@@ -60,56 +60,49 @@ if not supabase:
 teacher_id = st.session_state.get('teacher_id')
 teacher_name = st.session_state.get('teacher_name', '선생님')
 
-# --- !!! PDF 생성 함수 정의 (한글 폰트 처리 포함) !!! ---
 def create_pdf(text_content, title="AI 분석 결과"):
     pdf = FPDF()
     pdf.add_page()
 
-    # 한글 폰트 추가 (파일 경로는 실제 위치에 맞게!)
+    # 한글 폰트 추가
     try:
-        font_path = 'fonts/NanumGothicCoding.ttf' # 폰트 파일 경로
+        font_path = 'fonts/NanumGothicCoding.ttf'
         pdf.add_font('NanumGothic', '', font_path, uni=True)
-        pdf.set_font('NanumGothic', size=16) # 제목용 폰트 설정
-    except RuntimeError as e:
-        st.error(f"PDF 오류: 폰트 파일을 찾을 수 없습니다. 경로: '{font_path}' - {e}")
-        return None
+        pdf.set_font('NanumGothic', size=16)
     except Exception as e:
-        st.error(f"PDF 오류: 폰트 설정 중 오류: {e}")
+        st.error(f"PDF 오류: 폰트 처리 중 오류 - {e}")
         return None
 
-    # 제목 추가
+    # 제목
     try:
-        # 제목은 한글이므로 UTF-8 인코딩 후 디코딩 시도 (또는 직접)
-        pdf.cell(0, 10, txt=title, ln=1, align='C') # 직접 사용 시도
-    except UnicodeEncodeError:
-        pdf.cell(0, 10, txt=title.encode('utf-8').decode('latin-1'), ln=1, align='C') # 이전 방식
+        pdf.cell(0, 10, txt=title, ln=1, align='C')
+        pdf.ln(10)
     except Exception as e:
-         st.error(f"PDF 제목 쓰기 오류: {e}")
-         return None
-    pdf.ln(10) # 줄바꿈
+        st.error(f"PDF 제목 쓰기 오류: {e}")
+        return None
 
-    # 본문 내용 추가
-    pdf.set_font('NanumGothic', size=10) # 본문용 폰트 설정
+    # 본문
+    pdf.set_font('NanumGothic', size=10)
     try:
-        # uni=True 폰트 사용 시 UTF-8 문자열 직접 사용 가능해야 함
         pdf.multi_cell(0, 5, txt=text_content)
-    except UnicodeEncodeError: # 혹시 모를 인코딩 오류 대비
-         pdf.multi_cell(0, 5, txt=text_content.encode('utf-8').decode('latin-1'))
     except Exception as e:
         st.error(f"PDF 내용 쓰기 오류: {e}")
         return None
 
-    # PDF 데이터를 바이트 형태로 반환 (수정된 부분)
+    # PDF 데이터를 바이트 형태로 반환 (수정된 부분 - 타입 체크 완화)
     try:
-        # 최신 fpdf2는 파일 경로 없이 output() 호출 시 bytes 반환
-        pdf_bytes = pdf.output()
-        # 반환값이 bytes 타입인지 확인 (검증 강화)
-        if not isinstance(pdf_bytes, bytes):
-             raise TypeError(f"pdf.output() did not return bytes (returned {type(pdf_bytes)}). Check fpdf2 version.")
-        return pdf_bytes
+        pdf_data = pdf.output() # 바이트 또는 바이트 배열 반환 기대
+
+        # 반환값이 bytes 또는 bytearray 인지 확인 (더 유연하게)
+        if isinstance(pdf_data, (bytes, bytearray)):
+             return pdf_data # 그대로 반환
+        else:
+             # 예상치 못한 타입 반환 시 오류 발생
+             raise TypeError(f"pdf.output() did not return bytes or bytearray (returned {type(pdf_data)}).")
+
     except Exception as e_output:
         st.error(f"PDF 데이터 생성(출력) 중 오류: {e_output}")
-        print("PDF Output Error Traceback:") # 콘솔에 상세 오류 출력
+        print("PDF Output Error Traceback:")
         traceback.print_exc()
         return None
 
