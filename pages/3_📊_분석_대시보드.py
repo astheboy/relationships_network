@@ -647,36 +647,56 @@ if selected_class_id and selected_survey_id:
 
                             if selected_student_id:
                                 analysis_type = 'student_profile' # 분석 유형 정의
-
+                                # 세션 상태 키 정의
+                                session_key_result = f"ai_result_{selected_student_id}_{analysis_type}"
+                                session_key_comment = f"ai_comment_{selected_student_id}_{analysis_type}"
                                 # --- 1. 캐시된 결과 조회 ---
                                 cached_result = None
                                 generated_time = None
+                                cache_response = None
+                                cached_comment = "" # 기본 빈 문자열
                                 try:
-                                    cache_response = supabase.table("ai_analysis_results") \
+                                    # Supabase 객체 유효성 확인
+                                    if not supabase:
+                                        raise ConnectionError("Supabase 클라이언트가 유효하지 않습니다.")
+
+                                    st.write(f"DEBUG: Checking cache for survey {selected_survey_id}, student {selected_student_id}") # 디버깅
+                                    cache_query = supabase.table("ai_analysis_results") \
                                         .select("result_text, generated_at") \
                                         .eq("survey_instance_id", selected_survey_id) \
                                         .eq("student_id", selected_student_id) \
                                         .eq("analysis_type", analysis_type) \
                                         .maybe_single() \
-                                        .execute()
-                                    if cache_response.data:
-                                        cached_result = cache_response.data.get("result_text")
-                                        generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M') # 시간 포맷 변경
-                                        st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
-                                        st.info(cached_result) # 캐시된 결과 바로 표시
+                                        # .execute()
+                                    try:
+                                        cache_response = cache_query.execute()
+                                        st.write(f"DEBUG: Cache query response type: {type(cache_response)}") # 타입 확인
+                                        if cache_response is not None:
+                                            if hasattr(cache_response, 'data') and cache_response.data:
+                                                cached_result = cache_response.data.get("result_text")
+                                                generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M') # 시간 포맷 변경
+                                                st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
+                                                st.info(cached_result) # 캐시된 결과 바로 표시
+                                        else:
+                                            # execute() 자체가 None 반환 또는 실패 시
+                                            st.warning("캐시된 결과를 조회하는 중 문제가 발생했습니다 (응답 객체 없음). AI 분석을 새로 실행합니다.")
+                                            print("Supabase cache query execute() returned None or failed.")
+                                    except Exception as exec_e_cache:
+                                        st.warning(f"캐시 조회 쿼리 실행 오류: {exec_e_cache}")
+                                        cache_response = None # 오류 시 None 처리
+                                    
+                                except ConnectionError as ce:
+                                    st.error(f"데이터베이스 연결 오류: {ce}")
+                                    # 필요시 st.stop()
                                 except Exception as e:
                                     st.warning(f"캐시된 분석 결과 조회 중 오류: {e}")
                                     
                                 # --- 2. 분석 실행 버튼 (캐시 없거나, 다시 분석 원할 때) ---
                                 regenerate = st.button("🔄 AI 분석 실행/재실행", key=f"run_ai_{selected_student_id}")
-                                if regenerate or not cached_result: # 버튼 클릭 또는 캐시 없을 때
-                                    if not cached_result: # 캐시가 없어서 실행될 때만 스피너 표시
-                                        st.write("AI 분석을 요청합니다...") # 버튼 위에 표시되도록 순서 조정
-                                    else:
-                                        st.write("AI 분석을 다시 요청합니다...")
+                                if regenerate: # 버튼 클릭 할때
                                 # if st.button(f"'{selected_student_name}' 학생 프로파일 생성하기", key="generate_profile"):
                                     with st.spinner(f"{selected_student_name} 학생의 관계 데이터를 분석 중입니다..."):
-
+                                        previous_comment = st.session_state.get(session_key_comment, "") # 현재 세션의 코멘트 가져오기    
                                         # 1. 선택된 학생의 응답 데이터 찾기
                                         student_response_row = analysis_df[analysis_df['submitter_id'] == selected_student_id]
                                         if not student_response_row.empty:
@@ -730,7 +750,7 @@ if selected_class_id and selected_survey_id:
                                         4.  '{selected_student_name}' 학생을 칭찬한 친구 목록: [{praised_by_text}]
                                         5.  '{selected_student_name}' 학생이 어렵다고 한 친구: {my_difficult or '없음'} (이유: {my_difficult_reason or '없음'})
                                         6.  '{selected_student_name}' 학생을 어렵다고 한 친구 목록: [{difficult_by_text}]
-
+                                        {f"참고: 이 학생에 대한 이전 교사 코멘트: {previous_comment}" if previous_comment else ""}
                                         위 정보를 종합하여 '{selected_student_name}' 학생의 학급 내 교우관계 특징, 사회성(예: 관계 주도성, 수용성), 긍정적/부정적 관계 양상, 그리고 교사가 관심을 가져야 할 부분(잠재적 강점 또는 어려움)에 대해 구체적으로 분석하고 해석해주세요. 분석 결과에는 학생 ID가 아닌 학생 이름만 포함하여 한국어로 작성해주세요.
                                         """
 
@@ -738,9 +758,37 @@ if selected_class_id and selected_survey_id:
                                         new_analysis_result = call_gemini(prompt, api_key) # utils 사용 가정
                                         # --- 결과 처리 및 캐시 저장/업데이트 ---
                                         if new_analysis_result and not new_analysis_result.startswith("오류:"):
-                                            st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
-                                            st.info(new_analysis_result) # 또는 st.text_area
-                                            
+                                            st.session_state[session_key_result] = new_analysis_result
+                                            # 재분석 시 기존 코멘트는 유지하거나 지울 수 있음 (현재는 유지)
+                                            # st.session_state[session_key_comment] = "" # 재분석 시 코멘트 초기화 원하면
+                                            st.success("✅ AI 분석 완료! 아래 결과를 확인하고 저장하세요.")
+                                        else:
+                                            # AI 호출 실패 시 오류 메시지 표시
+                                            st.error(new_analysis_result or "AI 분석 중 알 수 없는 오류")
+                                            if session_key_result in st.session_state:
+                                                del st.session_state[session_key_result] # 실패 시 이전 결과도 지움
+                                
+                                current_result = st.session_state.get(session_key_result)
+                                if current_result:
+                                    st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
+                                    st.info(current_result) # 또는 st.text_area
+                                     
+                                    # --- 4. 교사 코멘트 입력 및 저장 버튼 ---
+                                    st.markdown("---")
+                                    st.subheader("✍️ 교사 코멘트 추가 및 저장")
+                                    # 세션 상태 또는 DB에서 불러온 기존 코멘트를 기본값으로 사용
+                                    current_comment = st.session_state.get(session_key_comment, cached_comment) # 세션>DB 순서
+                                    teacher_comment_input = st.text_area(
+                                        "분석 결과에 대한 교사 의견 또는 추가 메모:",
+                                        value=current_comment,
+                                        height=150,
+                                        key=f"comment_input_{selected_student_id}"
+                                    )       
+                                    
+                                    if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_student_id}"):
+                                        if not current_result:
+                                            st.warning("저장할 AI 분석 결과가 없습니다. 먼저 분석을 실행해주세요.")
+                                        else:
                                             # DB에 결과 저장 (Upsert 사용: 없으면 Insert, 있으면 Update)
                                             try:
                                                 # upsert 할 데이터 준비
