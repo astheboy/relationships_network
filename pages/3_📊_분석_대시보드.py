@@ -660,7 +660,7 @@ if selected_class_id and selected_survey_id:
                                     if not supabase:
                                         raise ConnectionError("Supabase 클라이언트가 유효하지 않습니다.")
 
-                                    st.write(f"DEBUG: Checking cache for survey {selected_survey_id}, student {selected_student_id}") # 디버깅
+                                    # st.write(f"DEBUG: Checking cache for survey {selected_survey_id}, student {selected_student_id}") # 디버깅
                                     cache_query = supabase.table("ai_analysis_results") \
                                         .select("result_text, generated_at") \
                                         .eq("survey_instance_id", selected_survey_id) \
@@ -670,17 +670,17 @@ if selected_class_id and selected_survey_id:
                                         # .execute()
                                     try:
                                         cache_response = cache_query.execute()
-                                        st.write(f"DEBUG: Cache query response type: {type(cache_response)}") # 타입 확인
+                                        # st.write(f"DEBUG: Cache query response type: {type(cache_response)}") # 타입 확인
                                         if cache_response is not None:
                                             if hasattr(cache_response, 'data') and cache_response.data:
                                                 cached_result = cache_response.data.get("result_text")
                                                 generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M') # 시간 포맷 변경
                                                 st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
                                                 st.info(cached_result) # 캐시된 결과 바로 표시
-                                        else:
-                                            # execute() 자체가 None 반환 또는 실패 시
-                                            st.warning("캐시된 결과를 조회하는 중 문제가 발생했습니다 (응답 객체 없음). AI 분석을 새로 실행합니다.")
-                                            print("Supabase cache query execute() returned None or failed.")
+                                        # else:
+                                        #     # execute() 자체가 None 반환 또는 실패 시
+                                        #     st.warning("캐시된 결과를 조회하는 중 문제가 발생했습니다 (응답 객체 없음). AI 분석을 새로 실행합니다.")
+                                        #     print("Supabase cache query execute() returned None or failed.")
                                     except Exception as exec_e_cache:
                                         st.warning(f"캐시 조회 쿼리 실행 오류: {exec_e_cache}")
                                         cache_response = None # 오류 시 None 처리
@@ -796,7 +796,8 @@ if selected_class_id and selected_survey_id:
                                                     'survey_instance_id': selected_survey_id,
                                                     'student_id': selected_student_id,
                                                     'analysis_type': analysis_type,
-                                                    'result_text': new_analysis_result,
+                                                    'result_text': current_result,
+                                                    'teacher_comment': teacher_comment_input, # 입력된 코멘트 저장
                                                     'generated_at': datetime.datetime.now().isoformat(), # 현재 시각
                                                     # 'prompt_hash': prompt_hash # 선택 사항
                                                 }
