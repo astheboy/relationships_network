@@ -10,7 +10,8 @@ import itertools
 from fpdf import FPDF        # PDF 생성을 위해 추가
 from io import BytesIO      # 메모리 버퍼 사용 위해 추가
 import datetime
-import traceback   
+import traceback
+import hashlib   
 
 # --- 페이지 설정 ---
 st.set_page_config(page_title="분석 대시보드", page_icon="📊", layout="wide")
@@ -639,14 +640,41 @@ if selected_class_id and selected_survey_id:
                     st.subheader("학생별 관계 프로파일 생성")
                     if students_map:
                         student_names_list = ["-- 학생 선택 --"] + sorted(list(students_map.values()))
-                        selected_student_name = st.selectbox("분석할 학생을 선택하세요:", student_names_list)
+                        selected_student_name = st.selectbox("분석할 학생을 선택하세요:", student_names_list, key="profile_student_select")
 
                         if selected_student_name != "-- 학생 선택 --":
-                            # # 선택된 학생 ID 찾기
                             selected_student_id = next((sid for sid, name in students_map.items() if name == selected_student_name), None)
 
                             if selected_student_id:
-                                if st.button(f"'{selected_student_name}' 학생 프로파일 생성하기", key="generate_profile"):
+                                analysis_type = 'student_profile' # 분석 유형 정의
+
+                                # --- 1. 캐시된 결과 조회 ---
+                                cached_result = None
+                                generated_time = None
+                                try:
+                                    cache_response = supabase.table("ai_analysis_results") \
+                                        .select("result_text, generated_at") \
+                                        .eq("survey_instance_id", selected_survey_id) \
+                                        .eq("student_id", selected_student_id) \
+                                        .eq("analysis_type", analysis_type) \
+                                        .maybe_single() \
+                                        .execute()
+                                    if cache_response.data:
+                                        cached_result = cache_response.data.get("result_text")
+                                        generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M') # 시간 포맷 변경
+                                        st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
+                                        st.info(cached_result) # 캐시된 결과 바로 표시
+                                except Exception as e:
+                                    st.warning(f"캐시된 분석 결과 조회 중 오류: {e}")
+                                    
+                                # --- 2. 분석 실행 버튼 (캐시 없거나, 다시 분석 원할 때) ---
+                                regenerate = st.button("🔄 AI 분석 실행/재실행", key=f"run_ai_{selected_student_id}")
+                                if regenerate or not cached_result: # 버튼 클릭 또는 캐시 없을 때
+                                    if not cached_result: # 캐시가 없어서 실행될 때만 스피너 표시
+                                        st.write("AI 분석을 요청합니다...") # 버튼 위에 표시되도록 순서 조정
+                                    else:
+                                        st.write("AI 분석을 다시 요청합니다...")
+                                # if st.button(f"'{selected_student_name}' 학생 프로파일 생성하기", key="generate_profile"):
                                     with st.spinner(f"{selected_student_name} 학생의 관계 데이터를 분석 중입니다..."):
 
                                         # 1. 선택된 학생의 응답 데이터 찾기
@@ -705,14 +733,39 @@ if selected_class_id and selected_survey_id:
 
                                         위 정보를 종합하여 '{selected_student_name}' 학생의 학급 내 교우관계 특징, 사회성(예: 관계 주도성, 수용성), 긍정적/부정적 관계 양상, 그리고 교사가 관심을 가져야 할 부분(잠재적 강점 또는 어려움)에 대해 구체적으로 분석하고 해석해주세요. 분석 결과에는 학생 ID가 아닌 학생 이름만 포함하여 한국어로 작성해주세요.
                                         """
-                                        # st.write("--- DEBUG: Generated Prompt ---") # 프롬프트 확인용 (선택 사항)
-                                        # st.text(prompt)
-                                        # st.write("--- END DEBUG ---")
 
                                         # --- AI 호출 및 결과 표시 ---
-                                        profile_result = call_gemini(prompt, api_key) # utils 사용 가정
-                                        st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
-                                        st.info(profile_result) # 또는 st.text_area
+                                        new_analysis_result = call_gemini(prompt, api_key) # utils 사용 가정
+                                        # --- 결과 처리 및 캐시 저장/업데이트 ---
+                                        if new_analysis_result and not new_analysis_result.startswith("오류:"):
+                                            st.markdown(f"#### '{selected_student_name}' 학생 관계 프로파일 (AI 분석):")
+                                            st.info(new_analysis_result) # 또는 st.text_area
+                                            
+                                            # DB에 결과 저장 (Upsert 사용: 없으면 Insert, 있으면 Update)
+                                            try:
+                                                # upsert 할 데이터 준비
+                                                data_to_save = {
+                                                    'survey_instance_id': selected_survey_id,
+                                                    'student_id': selected_student_id,
+                                                    'analysis_type': analysis_type,
+                                                    'result_text': new_analysis_result,
+                                                    'generated_at': datetime.datetime.now().isoformat(), # 현재 시각
+                                                    # 'prompt_hash': prompt_hash # 선택 사항
+                                                }
+                                                # unique 제약 조건이 있는 컬럼들 지정하여 충돌 시 업데이트
+                                                upsert_response = supabase.table("ai_analysis_results") \
+                                                    .upsert(data_to_save, on_conflict='survey_instance_id, student_id, analysis_type') \
+                                                    .execute()
+
+                                                # upsert 성공 여부 확인 (API v2에서는 data가 없을 수 있음)
+                                                if not hasattr(upsert_response, 'error') or upsert_response.error is None:
+                                                    st.success("✅ 분석 결과가 데이터베이스에 저장/업데이트되었습니다.")
+                                                else:
+                                                    st.warning(f"분석 결과를 DB에 저장하는 중 오류 발생: {upsert_response.error}")
+
+                                            except Exception as db_e:
+                                                st.warning(f"분석 결과를 DB에 저장하는 중 예외 발생: {db_e}")
+                                                
                                         # if profile_result and not profile_result.startswith("오류:"):
                                         #     st.markdown("---")
                                         #     st.subheader("📄 분석 결과 저장/출력")
