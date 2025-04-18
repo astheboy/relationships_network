@@ -107,6 +107,85 @@ def create_pdf(text_content, title="AI 분석 결과"):
         traceback.print_exc()
         return None
 
+# --- 받은 점수 계산 함수 ---
+@st.cache_data # 입력값이 같으면 이전 계산 결과 재사용
+def calculate_received_scores(_analysis_df, _students_map):
+    """각 학생이 다른 학생들로부터 받은 평균 친밀도 점수를 계산합니다."""
+    # 입력 DataFrame이나 map이 비어있으면 빈 DataFrame 반환
+    if _analysis_df.empty or not _students_map:
+        return pd.DataFrame(columns=['student_id', 'student_name', 'average_score', 'received_count'])
+
+    # 모든 학생 ID에 대해 빈 점수 리스트 초기화
+    received_scores = {student_id: [] for student_id in _students_map.keys()}
+
+    # 전체 응답 순회
+    for index, row in _analysis_df.iterrows():
+        relations = row.get('parsed_relations', {}) # 파싱된 관계 데이터 가져오기
+        if isinstance(relations, dict): # 데이터가 딕셔너리 형태인지 확인
+            for target_student_id, relation_info in relations.items():
+                score = relation_info.get('intimacy') # 친밀도 점수 가져오기
+                # 점수가 유효하고, 점수를 받은 학생(target_student_id)이 학급 학생 목록에 있는지 확인
+                if isinstance(score, (int, float)) and target_student_id in received_scores:
+                    received_scores[target_student_id].append(score) # 해당 학생의 점수 리스트에 추가
+
+    # 평균 계산
+    avg_received_scores_list = []
+    for student_id, scores in received_scores.items():
+        if scores: # 받은 점수가 하나라도 있을 경우
+            avg_score = sum(scores) / len(scores)
+            avg_received_scores_list.append({
+                'student_id': student_id,
+                'student_name': _students_map.get(student_id, 'Unknown'), # ID를 이름으로 변환
+                'average_score': avg_score, # 평균 점수
+                'received_count': len(scores) # 받은 횟수
+            })
+
+    # 결과가 없으면 빈 DataFrame 반환
+    if not avg_received_scores_list:
+        return pd.DataFrame(columns=['student_id', 'student_name', 'average_score', 'received_count'])
+    # 결과를 DataFrame으로 변환하여 반환
+    return pd.DataFrame(avg_received_scores_list)
+
+
+# --- 준 점수 계산 함수 (기존 코드 약간 수정) ---
+@st.cache_data # 입력값이 같으면 이전 계산 결과 재사용
+def calculate_given_scores(_analysis_df, _students_map, id_col='submitter_id', name_col='submitter_name', relations_col='parsed_relations'):
+    """각 학생이 다른 학생들에게 준 평균 친밀도 점수 및 점수 목록을 계산합니다."""
+    # 입력 유효성 검사
+    if _analysis_df.empty or id_col not in _analysis_df.columns or not _students_map:
+         return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
+
+    given_scores_list = []
+    # submitter_id(점수를 준 학생) 기준으로 그룹화하여 순회
+    for submitter_id, group in _analysis_df.groupby(id_col):
+        submitter_name = _students_map.get(submitter_id, "알 수 없음")
+        # 해당 학생의 여러 응답 중 첫 번째 것 사용 (보통 학생당 응답은 1개)
+        row = group.iloc[0]
+        relations = row.get(relations_col, {})
+        scores_given = []
+
+        if isinstance(relations, dict) and relations:
+            for target_id, info in relations.items():
+                # 점수를 받은 학생(target_id)이 학급 학생인지 확인
+                if target_id in _students_map:
+                    score = info.get('intimacy')
+                    if isinstance(score, (int, float)):
+                        scores_given.append(score)
+
+        if scores_given: # 준 점수가 하나라도 있을 경우
+            avg_given = sum(scores_given) / len(scores_given)
+            given_scores_list.append({
+                'submitter_id': submitter_id,
+                'submitter_name': submitter_name,
+                'average_score_given': avg_given,
+                'rated_count': len(scores_given), # 평가한 학생 수
+                'scores_list': scores_given # 실제 준 점수 목록
+            })
+
+    if not given_scores_list:
+        return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
+    return pd.DataFrame(given_scores_list)
+
 st.title(f"📊 {teacher_name}의 분석 대시보드")
 st.write("학급과 설문 회차를 선택하여 결과를 분석하고 시각화합니다.")
 
@@ -230,10 +309,30 @@ if selected_class_id and selected_survey_id:
             st.error(f"분석 데이터 로드 중 오류 발생: {e}")
             return None, None
 
+
     # 데이터 로드 실행
     analysis_df, students_map = load_analysis_data(selected_survey_id)
 
     if analysis_df is not None and students_map:
+        # --- !!! 기본 분석 함수 호출 및 결과 저장 (데이터 로드 직후) !!! ---
+        try:
+            # 각 함수 호출하여 결과 DataFrame/Series 저장
+            avg_received_df = calculate_received_scores(analysis_df, students_map)
+            avg_given_df = calculate_given_scores(analysis_df, students_map)
+            # reciprocity_df = analyze_reciprocity(analysis_df, students_map) # analyze_reciprocity 함수가 정의되어 있다면
+            # all_scores_list = get_all_scores(analysis_df) # 전체 점수 목록 함수가 정의되어 있다면
+            # overall_scores_series = pd.Series(all_scores_list) if all_scores_list else pd.Series(dtype=float)
+
+            st.success("✅ 기본 분석 데이터 준비 완료.") # 계산 완료 알림
+
+        except Exception as calc_e:
+             st.error(f"기본 분석 데이터 계산 중 오류: {calc_e}")
+             # 오류 발생 시 빈 데이터프레임 등으로 초기화 (이후 코드 오류 방지)
+             avg_received_df = pd.DataFrame()
+             avg_given_df = pd.DataFrame()
+             reciprocity_df = pd.DataFrame()
+             overall_scores_series = pd.Series(dtype=float)
+        # --- !!! 계산 완료 !!! ---
         # --- 탭 구성 (기본 분석 + AI 분석 탭) ---
         tab_list = ["📊 관계 분석", "💬 서술형 응답", "✨ AI 심층 분석"]
         tab1, tab2, tab3 = st.tabs(tab_list)
@@ -243,320 +342,331 @@ if selected_class_id and selected_survey_id:
             # --- !!! 여기에 기본적인 관계 점수 분석 및 시각화 코드 !!! ---
             # (예: 평균 받은 점수 막대 그래프 등 이전 단계에서 구현한 내용)
                         # 1. 받은 친밀도 점수 계산
-            received_scores = {} # key: student_id, value: list of scores received
-            for student_id in students_map.keys():
-                received_scores[student_id] = []
+            # received_scores = {} # key: student_id, value: list of scores received
+            # for student_id in students_map.keys():
+            #     received_scores[student_id] = []
 
-            for index, row in analysis_df.iterrows():
-                relations = row.get('parsed_relations', {})
-                for target_student_id, relation_info in relations.items():
-                    score = relation_info.get('intimacy')
-                    if isinstance(score, (int, float)) and target_student_id in received_scores:
-                        received_scores[target_student_id].append(score)
+            # for index, row in analysis_df.iterrows():
+            #     relations = row.get('parsed_relations', {})
+            #     for target_student_id, relation_info in relations.items():
+            #         score = relation_info.get('intimacy')
+            #         if isinstance(score, (int, float)) and target_student_id in received_scores:
+            #             received_scores[target_student_id].append(score)
 
-            # 2. 평균 받은 점수 계산 및 시각화
-            avg_received_scores = []
-            for student_id, scores in received_scores.items():
-                if scores:
-                    avg_score = sum(scores) / len(scores)
-                    avg_received_scores.append({
-                        'student_id': student_id,
-                        'student_name': students_map.get(student_id, 'Unknown'),
-                        'average_score': avg_score,
-                        'received_count': len(scores)
-                    })
+            # # 2. 평균 받은 점수 계산 및 시각화
+            # avg_received_scores = []
+            # for student_id, scores in received_scores.items():
+            #     if scores:
+            #         avg_score = sum(scores) / len(scores)
+            #         avg_received_scores.append({
+            #             'student_id': student_id,
+            #             'student_name': students_map.get(student_id, 'Unknown'),
+            #             'average_score': avg_score,
+            #             'received_count': len(scores)
+            #         })
 
-            if avg_received_scores:
-                avg_df = pd.DataFrame(avg_received_scores).sort_values(by='average_score', ascending=False)
+            if not avg_received_df.empty:
+                # avg_df = pd.DataFrame(avg_received_scores).sort_values(by='average_score', ascending=False)
 
                 st.subheader("학생별 평균 받은 친밀도 점수")
-                fig = px.bar(avg_df, x='student_name', y='average_score',
-                             title="평균 받은 친밀도 점수 (높을수록 긍정적 관계)",
-                             labels={'student_name':'학생 이름', 'average_score':'평균 점수'},
-                             hover_data=['received_count'], # 마우스 올리면 받은 횟수 표시
-                             color='average_score', # 점수에 따라 색상 변화
-                             color_continuous_scale=px.colors.sequential.Viridis) # 색상 스케일
-                st.plotly_chart(fig, use_container_width=True)
+                fig_received = px.bar(avg_received_df.sort_values('average_score', ascending=False), x='student_name', y='average_score')
+                st.plotly_chart(fig_received, use_container_width=True)
+                # fig = px.bar(avg_df, x='student_name', y='average_score',
+                #              title="평균 받은 친밀도 점수 (높을수록 긍정적 관계)",
+                #              labels={'student_name':'학생 이름', 'average_score':'평균 점수'},
+                #              hover_data=['received_count'], # 마우스 올리면 받은 횟수 표시
+                #              color='average_score', # 점수에 따라 색상 변화
+                #              color_continuous_scale=px.colors.sequential.Viridis) # 색상 스케일
+                # st.plotly_chart(fig, use_container_width=True)
 
                 # 간단 분석
-                highest = avg_df.iloc[0]
-                lowest = avg_df.iloc[-1]
+                highest = avg_received_df.iloc[0]
+                lowest = avg_received_df.iloc[-1]
                 st.write(f"🌟 가장 높은 평균 점수를 받은 학생: **{highest['student_name']}** ({highest['average_score']:.1f}점, {highest['received_count']}회)")
                 st.write(f"😟 가장 낮은 평균 점수를 받은 학생: **{lowest['student_name']}** ({lowest['average_score']:.1f}점, {lowest['received_count']}회)")
+            else:
+                st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
+
             st.divider() # 구분선 추가
 
             # --- 2. 준 친밀도 점수 분석 (새로 추가) ---
-            st.subheader("학생별 평균 준 친밀도 점수")
+            # if not avg_given_df.empty:
+            # # 함수: 각 학생이 '준' 점수들의 평균과 목록 계산
+            # @st.cache_data # 계산 결과를 캐싱하여 성능 향상
+            # def calculate_given_scores(df, student_map, id_col='submitter_id', name_col='submitter_name', relations_col='parsed_relations'):
+            #     given_scores_list = []
+            #     # submitter_id 기준으로 순회 (한 학생당 한 번만 계산)
+            #     for submitter_id, group in df.groupby(id_col):
+            #         submitter_name = student_map.get(submitter_id, "알 수 없음")
+            #         # 해당 학생의 모든 응답 중 첫 번째 응답의 관계 데이터 사용 (보통 학생당 응답은 하나)
+            #         row = group.iloc[0]
+            #         relations = row.get(relations_col, {})
+            #         scores_given = []
 
-            # 함수: 각 학생이 '준' 점수들의 평균과 목록 계산
-            @st.cache_data # 계산 결과를 캐싱하여 성능 향상
-            def calculate_given_scores(df, student_map, id_col='submitter_id', name_col='submitter_name', relations_col='parsed_relations'):
-                given_scores_list = []
-                # submitter_id 기준으로 순회 (한 학생당 한 번만 계산)
-                for submitter_id, group in df.groupby(id_col):
-                    submitter_name = student_map.get(submitter_id, "알 수 없음")
-                    # 해당 학생의 모든 응답 중 첫 번째 응답의 관계 데이터 사용 (보통 학생당 응답은 하나)
-                    row = group.iloc[0]
-                    relations = row.get(relations_col, {})
-                    scores_given = []
+            #         # 유효한 관계 데이터(dict)인지, 내용은 있는지 확인
+            #         if isinstance(relations, dict) and relations:
+            #             for target_id, info in relations.items():
+            #                 score = info.get('intimacy')
+            #                 # 점수가 숫자 타입인지 확인
+            #                 if isinstance(score, (int, float)):
+            #                     scores_given.append(score)
 
-                    # 유효한 관계 데이터(dict)인지, 내용은 있는지 확인
-                    if isinstance(relations, dict) and relations:
-                        for target_id, info in relations.items():
-                            score = info.get('intimacy')
-                            # 점수가 숫자 타입인지 확인
-                            if isinstance(score, (int, float)):
-                                scores_given.append(score)
+            #         if scores_given: # 준 점수가 하나라도 있을 경우
+            #             avg_given = sum(scores_given) / len(scores_given)
+            #             given_scores_list.append({
+            #                 'submitter_id': submitter_id,
+            #                 'submitter_name': submitter_name,
+            #                 'average_score_given': avg_given,
+            #                 'rated_count': len(scores_given), # 몇 명에게 점수를 매겼는지
+            #                 'scores_list': scores_given # 분포 분석용 점수 목록
+            #             })
+            #     if not given_scores_list: # 계산된 결과가 없으면 빈 DataFrame 반환
+            #         return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
+            #     return pd.DataFrame(given_scores_list)
 
-                    if scores_given: # 준 점수가 하나라도 있을 경우
-                        avg_given = sum(scores_given) / len(scores_given)
-                        given_scores_list.append({
-                            'submitter_id': submitter_id,
-                            'submitter_name': submitter_name,
-                            'average_score_given': avg_given,
-                            'rated_count': len(scores_given), # 몇 명에게 점수를 매겼는지
-                            'scores_list': scores_given # 분포 분석용 점수 목록
-                        })
-                if not given_scores_list: # 계산된 결과가 없으면 빈 DataFrame 반환
-                    return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
-                return pd.DataFrame(given_scores_list)
-
-            # 계산 실행
-            avg_given_df = calculate_given_scores(analysis_df, students_map)
+            # # 계산 실행
+            # avg_given_df = calculate_given_scores(analysis_df, students_map)
 
             if not avg_given_df.empty:
+                st.subheader("학생별 평균 준 친밀도 점수")
                 # 평균 준 점수 기준 정렬
                 avg_given_df = avg_given_df.sort_values(by='average_score_given', ascending=False)
-
-                # 시각화: 평균 준 점수 막대 그래프
-                fig_given = px.bar(avg_given_df,
-                                   x='submitter_name',
-                                   y='average_score_given',
-                                   title="평균 '준' 친밀도 점수 (높을수록 다른 친구를 긍정적으로 평가)",
-                                   labels={'submitter_name':'학생 이름', 'average_score_given':'평균 준 점수'},
-                                   hover_data=['rated_count'], # 마우스 올리면 평가한 친구 수 표시
-                                   color='average_score_given', # 점수에 따라 색상 변화
-                                   color_continuous_scale=px.colors.sequential.Plasma_r) # 다른 색상 스케일 사용
-                fig_given.update_layout(yaxis_range=[0,100]) # Y축 범위 0-100 고정
-                st.plotly_chart(fig_given, use_container_width=True)
-
+                # --- !!! avg_given_df 변수 사용하여 시각화 !!! ---
+                fig_given = px.bar(avg_given_df.sort_values('average_score_given', ascending=False), x='submitter_name', y='average_score_given')
+                st.plotly_chart(fig_given)
+                # # 시각화: 평균 준 점수 막대 그래프
+                # fig_given = px.bar(avg_given_df,
+                #                    x='submitter_name',
+                #                    y='average_score_given',
+                #                    title="평균 '준' 친밀도 점수 (높을수록 다른 친구를 긍정적으로 평가)",
+                #                    labels={'submitter_name':'학생 이름', 'average_score_given':'평균 준 점수'},
+                #                    hover_data=['rated_count'], # 마우스 올리면 평가한 친구 수 표시
+                #                    color='average_score_given', # 점수에 따라 색상 변화
+                #                    color_continuous_scale=px.colors.sequential.Plasma_r) # 다른 색상 스케일 사용
+                # fig_given.update_layout(yaxis_range=[0,100]) # Y축 범위 0-100 고정
+                # st.plotly_chart(fig_given, use_container_width=True)
+                highest_giver = avg_given_df.iloc[0]
+                lowest_giver = avg_given_df.iloc[-1]
+                st.write(f"👍 다른 친구들에게 가장 높은 평균 점수를 준 학생: **{highest_giver['submitter_name']}** ({highest_giver['average_score_given']:.1f}점, {highest_giver['rated_count']}명 평가)")
+                st.write(f"🤔 다른 친구들에게 가장 낮은 평균 점수를 준 학생: **{lowest_giver['submitter_name']}** ({lowest_giver['average_score_given']:.1f}점, {lowest_giver['rated_count']}명 평가)")
                 # 간단 분석 요약
-                try: # 데이터가 1개만 있을 경우 iloc[-1] 오류 방지
-                    highest_giver = avg_given_df.iloc[0]
-                    lowest_giver = avg_given_df.iloc[-1]
-                    st.write(f"👍 다른 친구들에게 가장 높은 평균 점수를 준 학생: **{highest_giver['submitter_name']}** ({highest_giver['average_score_given']:.1f}점, {highest_giver['rated_count']}명 평가)")
-                    st.write(f"🤔 다른 친구들에게 가장 낮은 평균 점수를 준 학생: **{lowest_giver['submitter_name']}** ({lowest_giver['average_score_given']:.1f}점, {lowest_giver['rated_count']}명 평가)")
-                except IndexError:
-                     st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
+                # try: # 데이터가 1개만 있을 경우 iloc[-1] 오류 방지
+                #     highest_giver = avg_given_df.iloc[0]
+                #     lowest_giver = avg_given_df.iloc[-1]
+                #     st.write(f"👍 다른 친구들에게 가장 높은 평균 점수를 준 학생: **{highest_giver['submitter_name']}** ({highest_giver['average_score_given']:.1f}점, {highest_giver['rated_count']}명 평가)")
+                #     st.write(f"🤔 다른 친구들에게 가장 낮은 평균 점수를 준 학생: **{lowest_giver['submitter_name']}** ({lowest_giver['average_score_given']:.1f}점, {lowest_giver['rated_count']}명 평가)")
+                # except IndexError:
+                #      st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
+            else:
+                st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
+
+            # --- (선택 사항) 개인별 준 점수 분포 시각화 ---
+            st.markdown("---")
+
+            # --- 3. 학급 전체 친밀도 점수 분포 (새로 추가) ---
+            st.subheader("학급 전체 친밀도 점수 분포")
+
+            all_scores_given = [] # 모든 점수를 담을 리스트
+            # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
+            # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
+            for relations in analysis_df['parsed_relations'].dropna():
+                # relations가 dict 타입인지, 내용이 있는지 확인
+                if isinstance(relations, dict) and relations:
+                    for info in relations.values():
+                        score = info.get('intimacy')
+                        # score가 숫자 타입인지 확인
+                        if isinstance(score, (int, float)):
+                            all_scores_given.append(score)
+
+            if all_scores_given: # 추출된 점수가 있을 경우
+                # 점수 목록으로 DataFrame 생성
+                scores_dist_df = pd.DataFrame({'점수': all_scores_given})
+
+                # 히스토그램 생성
+                fig_overall_dist = px.histogram(
+                    scores_dist_df,
+                    x='점수', # X축은 점수
+                    title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
+                    labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
+                    nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
+                    range_x=[0, 100] # X축 범위 0-100으로 고정
+                )
+                # 그래프 레이아웃 추가 설정
+                fig_overall_dist.update_layout(
+                    bargap=0.1, # 막대 사이 간격
+                    yaxis_title="응답 빈도수" # Y축 제목
+                )
+                st.plotly_chart(fig_overall_dist, use_container_width=True)
+
+                # 간단한 통계 정보 추가 (선택 사항)
+                try:
+                    avg_overall = scores_dist_df['점수'].mean()
+                    median_overall = scores_dist_df['점수'].median()
+                    stdev_overall = scores_dist_df['점수'].std()
+                    st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
+                    st.write(f"**중앙값:** {median_overall:.0f}")
+                    st.write(f"**표준편차:** {stdev_overall:.1f}")
+                    st.caption("""
+                    * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
+                    * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
+                    * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
+                    """)
+                except Exception as stat_e:
+                    st.warning(f"통계 계산 중 오류: {stat_e}")
+            # --- 4. 관계 상호성 분석 (새로 추가) ---
+            st.markdown("---")        
+            st.subheader("관계 상호성 분석 (Reciprocity)")
+
+            # 함수: 상호 평가 점수 계산 및 관계 유형 분류
+            @st.cache_data # 계산 결과를 캐싱
+            def analyze_reciprocity(df, student_map):
+                # 입력 데이터 유효성 검사
+                if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
+                    return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+
+                # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
+                #   Key: (주는학생ID, 받는학생ID), Value: 점수
+                score_lookup = {}
+                for index, row in df.iterrows():
+                    submitter_id = row['submitter_id']
+                    relations = row.get('parsed_relations', {})
+                    if isinstance(relations, dict):
+                        for target_id, info in relations.items():
+                            # target_id가 실제 학급 학생인지 확인 (students_map 사용)
+                            if target_id in student_map:
+                                score = info.get('intimacy')
+                                if isinstance(score, (int, float)):
+                                    score_lookup[(submitter_id, target_id)] = score
+
+                # 2. 모든 학생 쌍에 대해 상호 점수 확인
+                student_ids = list(student_map.keys())
+                reciprocal_data = []
+
+                # 모든 가능한 학생 쌍 (A, B) 조합 생성 (itertools 사용)
+                for id_a, id_b in itertools.combinations(student_ids, 2):
+                    # A가 B에게 준 점수 조회
+                    score_a_to_b = score_lookup.get((id_a, id_b))
+                    # B가 A에게 준 점수 조회
+                    score_b_to_a = score_lookup.get((id_b, id_a))
+
+                    # 둘 다 서로 평가한 경우에만 분석 대상에 포함
+                    if score_a_to_b is not None and score_b_to_a is not None:
+                        name_a = student_map.get(id_a, "알 수 없음")
+                        name_b = student_map.get(id_b, "알 수 없음")
+                        reciprocal_data.append({
+                            '학생 A': name_a,
+                            '학생 B': name_b,
+                            'A->B 점수': score_a_to_b,
+                            'B->A 점수': score_b_to_a
+                        })
+
+                if not reciprocal_data: # 상호 평가 데이터가 없으면 빈 DataFrame 반환
+                    return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+
+                reciprocity_df = pd.DataFrame(reciprocal_data)
+
+                # 3. 관계 유형 분류 함수 정의
+                def categorize_relationship(row, high_threshold=75, low_threshold=35): # 기준점수 조절 가능
+                    score_ab = row['A->B 점수']
+                    score_ba = row['B->A 점수']
+                    high_a = score_ab >= high_threshold
+                    low_a = score_ab <= low_threshold
+                    high_b = score_ba >= high_threshold
+                    low_b = score_ba <= low_threshold
+
+                    if high_a and high_b: return "✅ 상호 높음"
+                    if low_a and low_b: return "⚠️ 상호 낮음"
+                    if high_a and low_b: return f"↗️ {row['학생 A']} > {row['학생 B']} (일방 높음)"
+                    if low_a and high_b: return f"↖️ {row['학생 B']} > {row['학생 A']} (일방 높음)"
+                    # 필요시 중간 유형 추가 가능
+                    return "↔️ 혼합/중간"
+
+                # DataFrame에 '관계 유형' 컬럼 추가
+                reciprocity_df['관계 유형'] = reciprocity_df.apply(categorize_relationship, axis=1)
+                return reciprocity_df
+
+            # 상호성 분석 실행
+            reciprocity_results_df = analyze_reciprocity(analysis_df, students_map)
+
+            if not reciprocity_results_df.empty:
+                st.write("서로 점수를 매긴 학생 쌍 간의 관계 유형입니다.")
+
+                # 요약 통계: 관계 유형별 개수
+                type_counts = reciprocity_results_df['관계 유형'].value_counts()
+                st.write("##### 관계 유형별 분포:")
+                st.dataframe(type_counts)
+                # 파이 차트 추가 (선택 사항)
+                # fig_pie = px.pie(type_counts, values=type_counts.values, names=type_counts.index, title="관계 유형 비율")
+                # st.plotly_chart(fig_pie, use_container_width=True)
 
 
-                # --- (선택 사항) 개인별 준 점수 분포 시각화 ---
-                st.markdown("---")
+                # 상세 테이블: 상호 평가 목록
+                st.write("##### 상세 관계 목록:")
+                # 컬럼 순서 및 이름 변경하여 표시 (선택 사항)
+                display_df = reciprocity_results_df[['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형']]
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-                # --- 3. 학급 전체 친밀도 점수 분포 (새로 추가) ---
-                st.subheader("학급 전체 친밀도 점수 분포")
+                # (고급/선택) 네트워크 그래프 시각화
+                # if st.checkbox("관계 네트워크 그래프 보기 (상호 평가 기반)"):
+                #     st.info("네트워크 그래프 기능은 준비 중입니다.")
+                #     # NetworkX, Pyvis 등을 사용하여 그래프 생성 및 표시 로직 추가
 
-                all_scores_given = [] # 모든 점수를 담을 리스트
-                # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
-                # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
-                for relations in analysis_df['parsed_relations'].dropna():
-                    # relations가 dict 타입인지, 내용이 있는지 확인
-                    if isinstance(relations, dict) and relations:
-                        for info in relations.values():
-                            score = info.get('intimacy')
-                            # score가 숫자 타입인지 확인
-                            if isinstance(score, (int, float)):
-                                all_scores_given.append(score)
+            else:
+                st.write("상호 평가 데이터가 부족하여 관계 상호성 분석을 할 수 없습니다.")
+                st.caption("학생들이 서로에 대해 충분히 평가해야 이 분석이 가능합니다.")        
+            st.markdown("---")        
+            st.subheader("개인별 '준' 점수 분포 확인")
+            # 학생 이름 목록 생성 (submitter_name 사용)
+            # 학생 이름 목록 생성 (avg_given_df에서 가져옴 - 이전 단계에서 생성됨)
+            if not avg_given_df.empty:
+                student_names_for_given = ["-- 학생 선택 --"] + sorted(avg_given_df['submitter_name'].unique())
+                student_to_view = st.selectbox(
+                    "점수 내역을 확인할 학생 선택:", # 레이블 약간 변경
+                    options=student_names_for_given,
+                    key="given_score_detail_select" # 키 변경
+                )
 
-                if all_scores_given: # 추출된 점수가 있을 경우
-                    # 점수 목록으로 DataFrame 생성
-                    scores_dist_df = pd.DataFrame({'점수': all_scores_given})
+                if student_to_view != "-- 학생 선택 --":
+                    # --- !!! 선택된 학생의 'parsed_relations' 데이터 추출 및 변환 !!! ---
+                    # analysis_df에서 해당 학생의 행 찾기
+                    student_data_row = analysis_df[analysis_df['submitter_name'] == student_to_view]
 
-                    # 히스토그램 생성
-                    fig_overall_dist = px.histogram(
-                        scores_dist_df,
-                        x='점수', # X축은 점수
-                        title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
-                        labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
-                        nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
-                        range_x=[0, 100] # X축 범위 0-100으로 고정
-                    )
-                    # 그래프 레이아웃 추가 설정
-                    fig_overall_dist.update_layout(
-                        bargap=0.1, # 막대 사이 간격
-                        yaxis_title="응답 빈도수" # Y축 제목
-                    )
-                    st.plotly_chart(fig_overall_dist, use_container_width=True)
+                    if not student_data_row.empty:
+                        relations_dict = student_data_row.iloc[0].get('parsed_relations', {})
+                        individual_ratings = [] # 막대 그래프용 데이터 리스트
 
-                    # 간단한 통계 정보 추가 (선택 사항)
-                    try:
-                        avg_overall = scores_dist_df['점수'].mean()
-                        median_overall = scores_dist_df['점수'].median()
-                        stdev_overall = scores_dist_df['점수'].std()
-                        st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
-                        st.write(f"**중앙값:** {median_overall:.0f}")
-                        st.write(f"**표준편차:** {stdev_overall:.1f}")
-                        st.caption("""
-                        * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
-                        * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
-                        * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
-                        """)
-                    except Exception as stat_e:
-                        st.warning(f"통계 계산 중 오류: {stat_e}")
-                # --- 4. 관계 상호성 분석 (새로 추가) ---
-                st.markdown("---")        
-                st.subheader("관계 상호성 분석 (Reciprocity)")
+                        if isinstance(relations_dict, dict) and relations_dict:
+                            for classmate_id, info in relations_dict.items():
+                                score = info.get('intimacy')
+                                if isinstance(score, (int, float)):
+                                    # students_map (ID->이름 맵)을 사용하여 이름 가져오기
+                                    classmate_name = students_map.get(classmate_id, f"ID:{classmate_id[:4]}...")
+                                    individual_ratings.append({"평가 대상 학생": classmate_name, "내가 준 점수": score})
 
-                # 함수: 상호 평가 점수 계산 및 관계 유형 분류
-                @st.cache_data # 계산 결과를 캐싱
-                def analyze_reciprocity(df, student_map):
-                    # 입력 데이터 유효성 검사
-                    if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
-                        return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+                        if individual_ratings:
+                            # --- !!! 데이터프레임 생성 및 막대 그래프 그리기 !!! ---
+                            ratings_df = pd.DataFrame(individual_ratings)
+                            # 점수 기준으로 정렬 (높은 점수 -> 낮은 점수)
+                            ratings_df = ratings_df.sort_values(by="내가 준 점수", ascending=False)
 
-                    # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
-                    #   Key: (주는학생ID, 받는학생ID), Value: 점수
-                    score_lookup = {}
-                    for index, row in df.iterrows():
-                        submitter_id = row['submitter_id']
-                        relations = row.get('parsed_relations', {})
-                        if isinstance(relations, dict):
-                            for target_id, info in relations.items():
-                                # target_id가 실제 학급 학생인지 확인 (students_map 사용)
-                                if target_id in student_map:
-                                    score = info.get('intimacy')
-                                    if isinstance(score, (int, float)):
-                                        score_lookup[(submitter_id, target_id)] = score
-
-                    # 2. 모든 학생 쌍에 대해 상호 점수 확인
-                    student_ids = list(student_map.keys())
-                    reciprocal_data = []
-
-                    # 모든 가능한 학생 쌍 (A, B) 조합 생성 (itertools 사용)
-                    for id_a, id_b in itertools.combinations(student_ids, 2):
-                        # A가 B에게 준 점수 조회
-                        score_a_to_b = score_lookup.get((id_a, id_b))
-                        # B가 A에게 준 점수 조회
-                        score_b_to_a = score_lookup.get((id_b, id_a))
-
-                        # 둘 다 서로 평가한 경우에만 분석 대상에 포함
-                        if score_a_to_b is not None and score_b_to_a is not None:
-                            name_a = student_map.get(id_a, "알 수 없음")
-                            name_b = student_map.get(id_b, "알 수 없음")
-                            reciprocal_data.append({
-                                '학생 A': name_a,
-                                '학생 B': name_b,
-                                'A->B 점수': score_a_to_b,
-                                'B->A 점수': score_b_to_a
-                            })
-
-                    if not reciprocal_data: # 상호 평가 데이터가 없으면 빈 DataFrame 반환
-                        return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
-
-                    reciprocity_df = pd.DataFrame(reciprocal_data)
-
-                    # 3. 관계 유형 분류 함수 정의
-                    def categorize_relationship(row, high_threshold=75, low_threshold=35): # 기준점수 조절 가능
-                        score_ab = row['A->B 점수']
-                        score_ba = row['B->A 점수']
-                        high_a = score_ab >= high_threshold
-                        low_a = score_ab <= low_threshold
-                        high_b = score_ba >= high_threshold
-                        low_b = score_ba <= low_threshold
-
-                        if high_a and high_b: return "✅ 상호 높음"
-                        if low_a and low_b: return "⚠️ 상호 낮음"
-                        if high_a and low_b: return f"↗️ {row['학생 A']} > {row['학생 B']} (일방 높음)"
-                        if low_a and high_b: return f"↖️ {row['학생 B']} > {row['학생 A']} (일방 높음)"
-                        # 필요시 중간 유형 추가 가능
-                        return "↔️ 혼합/중간"
-
-                    # DataFrame에 '관계 유형' 컬럼 추가
-                    reciprocity_df['관계 유형'] = reciprocity_df.apply(categorize_relationship, axis=1)
-                    return reciprocity_df
-
-                # 상호성 분석 실행
-                reciprocity_results_df = analyze_reciprocity(analysis_df, students_map)
-
-                if not reciprocity_results_df.empty:
-                    st.write("서로 점수를 매긴 학생 쌍 간의 관계 유형입니다.")
-
-                    # 요약 통계: 관계 유형별 개수
-                    type_counts = reciprocity_results_df['관계 유형'].value_counts()
-                    st.write("##### 관계 유형별 분포:")
-                    st.dataframe(type_counts)
-                    # 파이 차트 추가 (선택 사항)
-                    # fig_pie = px.pie(type_counts, values=type_counts.values, names=type_counts.index, title="관계 유형 비율")
-                    # st.plotly_chart(fig_pie, use_container_width=True)
-
-
-                    # 상세 테이블: 상호 평가 목록
-                    st.write("##### 상세 관계 목록:")
-                    # 컬럼 순서 및 이름 변경하여 표시 (선택 사항)
-                    display_df = reciprocity_results_df[['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형']]
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                    # (고급/선택) 네트워크 그래프 시각화
-                    # if st.checkbox("관계 네트워크 그래프 보기 (상호 평가 기반)"):
-                    #     st.info("네트워크 그래프 기능은 준비 중입니다.")
-                    #     # NetworkX, Pyvis 등을 사용하여 그래프 생성 및 표시 로직 추가
-
-                else:
-                    st.write("상호 평가 데이터가 부족하여 관계 상호성 분석을 할 수 없습니다.")
-                    st.caption("학생들이 서로에 대해 충분히 평가해야 이 분석이 가능합니다.")        
-                st.markdown("---")        
-                st.subheader("개인별 '준' 점수 분포 확인")
-                # 학생 이름 목록 생성 (submitter_name 사용)
-                # 학생 이름 목록 생성 (avg_given_df에서 가져옴 - 이전 단계에서 생성됨)
-                if not avg_given_df.empty:
-                    student_names_for_given = ["-- 학생 선택 --"] + sorted(avg_given_df['submitter_name'].unique())
-                    student_to_view = st.selectbox(
-                        "점수 내역을 확인할 학생 선택:", # 레이블 약간 변경
-                        options=student_names_for_given,
-                        key="given_score_detail_select" # 키 변경
-                    )
-
-                    if student_to_view != "-- 학생 선택 --":
-                        # --- !!! 선택된 학생의 'parsed_relations' 데이터 추출 및 변환 !!! ---
-                        # analysis_df에서 해당 학생의 행 찾기
-                        student_data_row = analysis_df[analysis_df['submitter_name'] == student_to_view]
-
-                        if not student_data_row.empty:
-                            relations_dict = student_data_row.iloc[0].get('parsed_relations', {})
-                            individual_ratings = [] # 막대 그래프용 데이터 리스트
-
-                            if isinstance(relations_dict, dict) and relations_dict:
-                                for classmate_id, info in relations_dict.items():
-                                    score = info.get('intimacy')
-                                    if isinstance(score, (int, float)):
-                                        # students_map (ID->이름 맵)을 사용하여 이름 가져오기
-                                        classmate_name = students_map.get(classmate_id, f"ID:{classmate_id[:4]}...")
-                                        individual_ratings.append({"평가 대상 학생": classmate_name, "내가 준 점수": score})
-
-                            if individual_ratings:
-                                # --- !!! 데이터프레임 생성 및 막대 그래프 그리기 !!! ---
-                                ratings_df = pd.DataFrame(individual_ratings)
-                                # 점수 기준으로 정렬 (높은 점수 -> 낮은 점수)
-                                ratings_df = ratings_df.sort_values(by="내가 준 점수", ascending=False)
-
-                                fig_individual_bar = px.bar(
-                                    ratings_df,
-                                    x="평가 대상 학생",   # X축: 친구 이름
-                                    y="내가 준 점수",    # Y축: 해당 친구에게 준 점수
-                                    title=f"'{student_to_view}' 학생이 다른 친구들에게 준 점수",
-                                    labels={"평가 대상 학생": "친구 이름", "내가 준 점수": "친밀도 점수"},
-                                    range_y=[0, 100],      # Y축 범위 0-100 고정
-                                    color="내가 준 점수",  # 점수에 따라 색상 지정
-                                    color_continuous_scale=px.colors.sequential.Viridis_r # 색상 스케일
-                                )
-                                # X축 레이블 정렬 (점수 높은 순)
-                                fig_individual_bar.update_layout(xaxis={'categoryorder':'total descending'})
-                                st.plotly_chart(fig_individual_bar, use_container_width=True)
-                                # --- !!! 히스토그램 코드를 이 막대 그래프 코드로 대체 !!! ---
-                            else:
-                                st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
+                            fig_individual_bar = px.bar(
+                                ratings_df,
+                                x="평가 대상 학생",   # X축: 친구 이름
+                                y="내가 준 점수",    # Y축: 해당 친구에게 준 점수
+                                title=f"'{student_to_view}' 학생이 다른 친구들에게 준 점수",
+                                labels={"평가 대상 학생": "친구 이름", "내가 준 점수": "친밀도 점수"},
+                                range_y=[0, 100],      # Y축 범위 0-100 고정
+                                color="내가 준 점수",  # 점수에 따라 색상 지정
+                                color_continuous_scale=px.colors.sequential.Viridis_r # 색상 스케일
+                            )
+                            # X축 레이블 정렬 (점수 높은 순)
+                            fig_individual_bar.update_layout(xaxis={'categoryorder':'total descending'})
+                            st.plotly_chart(fig_individual_bar, use_container_width=True)
+                            # --- !!! 히스토그램 코드를 이 막대 그래프 코드로 대체 !!! ---
                         else:
-                             st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우     
+                            st.write(f"'{student_to_view}' 학생이 준 점수 데이터가 없습니다.")
+                    else:
+                            st.warning(f"'{student_to_view}' 학생의 응답 데이터를 찾을 수 없습니다.") # analysis_df에 해당 학생 row가 없는 경우     
         
             else:
                 st.write("받은 친밀도 점수 데이터가 부족하여 분석할 수 없습니다.")
@@ -714,7 +824,7 @@ if selected_class_id and selected_survey_id:
                                         # --- !!! UUID -> 이름 변환 및 데이터 형식 재구성 !!! ---
                                         # 1. 내가 준 점수: UUID 키를 이름으로 변경하여 텍스트 생성
                                                                                 # 2. 선택된 학생이 받은 점수 정보 (avg_df 활용 - 이전 탭에서 계산됨)
-                                        received_avg_info = avg_df[avg_df['student_id'] == selected_student_id]
+                                        received_avg_info = avg_received_df[avg_received_df['student_id'] == selected_student_id]
                                         if not received_avg_info.empty:
                                             avg_score = received_avg_info.iloc[0].get('average_score')
                                             received_count = received_avg_info.iloc[0].get('received_count')
