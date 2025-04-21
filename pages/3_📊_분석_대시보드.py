@@ -339,45 +339,17 @@ if selected_class_id and selected_survey_id:
 
         with tab1:
             st.header("관계 분석 (친밀도 점수 기반)")
-            # --- !!! 여기에 기본적인 관계 점수 분석 및 시각화 코드 !!! ---
-            # (예: 평균 받은 점수 막대 그래프 등 이전 단계에서 구현한 내용)
-                        # 1. 받은 친밀도 점수 계산
-            # received_scores = {} # key: student_id, value: list of scores received
-            # for student_id in students_map.keys():
-            #     received_scores[student_id] = []
-
-            # for index, row in analysis_df.iterrows():
-            #     relations = row.get('parsed_relations', {})
-            #     for target_student_id, relation_info in relations.items():
-            #         score = relation_info.get('intimacy')
-            #         if isinstance(score, (int, float)) and target_student_id in received_scores:
-            #             received_scores[target_student_id].append(score)
-
-            # # 2. 평균 받은 점수 계산 및 시각화
-            # avg_received_scores = []
-            # for student_id, scores in received_scores.items():
-            #     if scores:
-            #         avg_score = sum(scores) / len(scores)
-            #         avg_received_scores.append({
-            #             'student_id': student_id,
-            #             'student_name': students_map.get(student_id, 'Unknown'),
-            #             'average_score': avg_score,
-            #             'received_count': len(scores)
-            #         })
 
             if not avg_received_df.empty:
-                # avg_df = pd.DataFrame(avg_received_scores).sort_values(by='average_score', ascending=False)
-
                 st.subheader("학생별 평균 받은 친밀도 점수")
-                fig_received = px.bar(avg_received_df.sort_values('average_score', ascending=False), x='student_name', y='average_score')
+                fig_received = px.bar(avg_received_df.sort_values('average_score', ascending=False), x='student_name', y='average_score',
+                                      title="평균 받은 친밀도 점수 (높을수록 긍정적 관계)",
+                                      labels={'student_name':'학생 이름', 'average_score':'평균 점수'},
+                                      hover_data=['received_count'], # 마우스 올리면 받은 횟수 표시
+                                      color='average_score', # 점수에 따라 색상 변화
+                                      color_continuous_scale=px.colors.sequential.Viridis)
                 st.plotly_chart(fig_received, use_container_width=True)
-                # fig = px.bar(avg_df, x='student_name', y='average_score',
-                #              title="평균 받은 친밀도 점수 (높을수록 긍정적 관계)",
-                #              labels={'student_name':'학생 이름', 'average_score':'평균 점수'},
-                #              hover_data=['received_count'], # 마우스 올리면 받은 횟수 표시
-                #              color='average_score', # 점수에 따라 색상 변화
-                #              color_continuous_scale=px.colors.sequential.Viridis) # 색상 스케일
-                # st.plotly_chart(fig, use_container_width=True)
+
 
                 # 간단 분석
                 highest = avg_received_df.iloc[0]
@@ -389,74 +361,23 @@ if selected_class_id and selected_survey_id:
 
             st.divider() # 구분선 추가
 
-            # --- 2. 준 친밀도 점수 분석 (새로 추가) ---
-            # if not avg_given_df.empty:
-            # # 함수: 각 학생이 '준' 점수들의 평균과 목록 계산
-            # @st.cache_data # 계산 결과를 캐싱하여 성능 향상
-            # def calculate_given_scores(df, student_map, id_col='submitter_id', name_col='submitter_name', relations_col='parsed_relations'):
-            #     given_scores_list = []
-            #     # submitter_id 기준으로 순회 (한 학생당 한 번만 계산)
-            #     for submitter_id, group in df.groupby(id_col):
-            #         submitter_name = student_map.get(submitter_id, "알 수 없음")
-            #         # 해당 학생의 모든 응답 중 첫 번째 응답의 관계 데이터 사용 (보통 학생당 응답은 하나)
-            #         row = group.iloc[0]
-            #         relations = row.get(relations_col, {})
-            #         scores_given = []
-
-            #         # 유효한 관계 데이터(dict)인지, 내용은 있는지 확인
-            #         if isinstance(relations, dict) and relations:
-            #             for target_id, info in relations.items():
-            #                 score = info.get('intimacy')
-            #                 # 점수가 숫자 타입인지 확인
-            #                 if isinstance(score, (int, float)):
-            #                     scores_given.append(score)
-
-            #         if scores_given: # 준 점수가 하나라도 있을 경우
-            #             avg_given = sum(scores_given) / len(scores_given)
-            #             given_scores_list.append({
-            #                 'submitter_id': submitter_id,
-            #                 'submitter_name': submitter_name,
-            #                 'average_score_given': avg_given,
-            #                 'rated_count': len(scores_given), # 몇 명에게 점수를 매겼는지
-            #                 'scores_list': scores_given # 분포 분석용 점수 목록
-            #             })
-            #     if not given_scores_list: # 계산된 결과가 없으면 빈 DataFrame 반환
-            #         return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
-            #     return pd.DataFrame(given_scores_list)
-
-            # # 계산 실행
-            # avg_given_df = calculate_given_scores(analysis_df, students_map)
-
             if not avg_given_df.empty:
                 st.subheader("학생별 평균 준 친밀도 점수")
                 # 평균 준 점수 기준 정렬
                 avg_given_df = avg_given_df.sort_values(by='average_score_given', ascending=False)
                 # --- !!! avg_given_df 변수 사용하여 시각화 !!! ---
-                fig_given = px.bar(avg_given_df.sort_values('average_score_given', ascending=False), x='submitter_name', y='average_score_given')
+                fig_given = px.bar(avg_given_df.sort_values('average_score_given', ascending=False), x='submitter_name', y='average_score_given',
+                                   title="평균 '준' 친밀도 점수 (높을수록 다른 친구를 긍정적으로 평가)",
+                                   labels={'submitter_name':'학생 이름', 'average_score_given':'평균 준 점수'},
+                                   hover_data=['rated_count'], # 마우스 올리면 평가한 친구 수 표시
+                                   color='average_score_given', # 점수에 따라 색상 변화
+                                   color_continuous_scale=px.colors.sequential.Plasma_r)
                 st.plotly_chart(fig_given)
-                # # 시각화: 평균 준 점수 막대 그래프
-                # fig_given = px.bar(avg_given_df,
-                #                    x='submitter_name',
-                #                    y='average_score_given',
-                #                    title="평균 '준' 친밀도 점수 (높을수록 다른 친구를 긍정적으로 평가)",
-                #                    labels={'submitter_name':'학생 이름', 'average_score_given':'평균 준 점수'},
-                #                    hover_data=['rated_count'], # 마우스 올리면 평가한 친구 수 표시
-                #                    color='average_score_given', # 점수에 따라 색상 변화
-                #                    color_continuous_scale=px.colors.sequential.Plasma_r) # 다른 색상 스케일 사용
-                # fig_given.update_layout(yaxis_range=[0,100]) # Y축 범위 0-100 고정
-                # st.plotly_chart(fig_given, use_container_width=True)
                 highest_giver = avg_given_df.iloc[0]
                 lowest_giver = avg_given_df.iloc[-1]
                 st.write(f"👍 다른 친구들에게 가장 높은 평균 점수를 준 학생: **{highest_giver['submitter_name']}** ({highest_giver['average_score_given']:.1f}점, {highest_giver['rated_count']}명 평가)")
                 st.write(f"🤔 다른 친구들에게 가장 낮은 평균 점수를 준 학생: **{lowest_giver['submitter_name']}** ({lowest_giver['average_score_given']:.1f}점, {lowest_giver['rated_count']}명 평가)")
-                # 간단 분석 요약
-                # try: # 데이터가 1개만 있을 경우 iloc[-1] 오류 방지
-                #     highest_giver = avg_given_df.iloc[0]
-                #     lowest_giver = avg_given_df.iloc[-1]
-                #     st.write(f"👍 다른 친구들에게 가장 높은 평균 점수를 준 학생: **{highest_giver['submitter_name']}** ({highest_giver['average_score_given']:.1f}점, {highest_giver['rated_count']}명 평가)")
-                #     st.write(f"🤔 다른 친구들에게 가장 낮은 평균 점수를 준 학생: **{lowest_giver['submitter_name']}** ({lowest_giver['average_score_given']:.1f}점, {lowest_giver['rated_count']}명 평가)")
-                # except IndexError:
-                #      st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
+
             else:
                 st.write("점수 비교 분석을 위한 데이터가 충분하지 않습니다.")
 
@@ -961,6 +882,138 @@ if selected_class_id and selected_survey_id:
 
                                         #     except Exception as pdf_e:
                                         #         st.error(f"PDF 다운로드 버튼 생성 중 오류: {pdf_e}")
+                    elif analysis_option == "학급 전체 관계 요약":
+                        st.subheader("학급 전체 관계 요약")
+                        analysis_type = 'class_summary' # 캐시 키로 사용
+
+                        # --- 캐시된 결과 조회 (student_id 없이 조회) ---
+                        cached_result = None
+                        generated_time = None
+                        cached_comment = "" # 기본 빈 문자열
+                        try:
+                            cache_response = supabase.table("ai_analysis_results") \
+                                .select("result_text, generated_at") \
+                                .eq("survey_instance_id", selected_survey_id) \
+                                .is_("student_id", None) \
+                                .eq("analysis_type", analysis_type) \
+                                .maybe_single() \
+                                .execute()
+                            # ... (캐시 조회 및 표시 로직 - 이전 답변 참고) ...
+                            if cache_response and cache_response.data:
+                                cached_result = cache_response.data.get("result_text")
+                                generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M')
+                                st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
+                                st.info(cached_result)
+
+                        except Exception as e:
+                            st.warning(f"캐시된 분석 결과 조회 중 오류: {e}")
+
+                        # --- 분석 실행 버튼 ---
+                        if st.button("🔄 학급 전체 AI 분석 실행/재실행", key="run_class_summary_ai"):
+                            if not cached_result: st.write("AI 분석을 요청합니다...")
+                            else: st.write("AI 분석을 다시 요청합니다...")
+
+                            with st.spinner("✨ 학급 전체 관계 데이터를 종합 분석 중입니다..."):
+                                # --- 프롬프트에 넣을 데이터 요약 ---
+                                try:
+                                    # 이전에 계산된 변수들 사용
+                                    prompt_data = {
+                                        "overall_avg": overall_scores_series.mean(),
+                                        "overall_median": overall_scores_series.median(),
+                                        "highest_received": avg_received_df.nlargest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                        "lowest_received": avg_received_df.nsmallest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                        "highest_given": avg_given_df.nlargest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                        "lowest_given": avg_given_df.nsmallest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                        "reciprocity_summary": reciprocity_df['관계 유형'].value_counts().to_dict() if not reciprocity_df.empty else {},
+                                        # 추가 가능: "difficult_mentions": ... (별도 계산 필요)
+                                    }
+
+                                    # JSON으로 변환하여 프롬프트 가독성 향상 (선택 사항)
+                                    prompt_data_json = json.dumps(prompt_data, ensure_ascii=False, indent=2, default=lambda x: round(x, 1) if isinstance(x, float) else str(x))
+
+
+                                    # --- 프롬프트 구성 ---
+                                    prompt = f"""
+                                    다음은 '{selected_class_name}' 학급의 '{selected_survey_name}' 설문 결과에 대한 요약 데이터입니다:
+                                    ```json
+                                    {prompt_data_json}
+                                    ```
+                                    참고: 점수는 0(매우 어려움) ~ 100(매우 친함) 척도입니다. 'highest/lowest_received'는 다른 학생들에게 받은 평균 점수 기준, 'highest/lowest_given'은 다른 학생들에게 준 평균 점수 기준입니다. 'reciprocity_summary'는 서로 평가한 학생 쌍의 관계 유형별 개수입니다.
+
+                                    위 데이터를 바탕으로 이 학급의 전반적인 교우관계 분위기, 주요 특징, 잠재적인 그룹 형성이나 소외 경향, 긍정적/부정적 상호작용 패턴 등 학급 전체 관계에 대한 종합적인 분석과 해석을 교사가 이해하기 쉽게 한국어로 작성해주세요. 주목해야 할 점이나 교사의 개입이 필요해 보이는 부분을 포함해도 좋습니다. 반드시 학생 이름을 언급할 때는 주어진 데이터에 있는 이름을 사용하세요.
+                                    """
+
+                                    # --- AI 호출 ---
+                                    new_analysis_result = call_gemini(prompt, api_key)
+
+                                    # --- 결과 처리 및 캐시 저장 (student_id = None) ---
+                                    if new_analysis_result and not new_analysis_result.startswith("오류:"):
+                                        st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
+                                        st.info(new_analysis_result)
+
+                                        # --- !!! 수동 저장 방식으로 변경 !!! ---
+                                        st.session_state[f"ai_result_{selected_survey_id}_class_summary"] = new_analysis_result
+                                        st.success("✅ AI 분석 완료! 아래 코멘트와 함께 저장할 수 있습니다.")
+
+                                    else:
+                                        st.error(new_analysis_result or "AI 분석 중 알 수 없는 오류")
+                                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                                        if session_key_class_summary in st.session_state:
+                                            del st.session_state[session_key_class_summary]
+
+                                except Exception as e:
+                                    st.error(f"AI 분석 준비/실행 중 오류 발생: {e}")
+                                    traceback.print_exc()
+
+
+                        # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
+                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                        session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
+
+                        current_result = st.session_state.get(session_key_class_summary)
+                        # 캐시된 결과가 있고 세션 결과가 없다면 캐시된 것을 보여줌 (페이지 첫 로드시)
+                        if not current_result and cached_result:
+                            current_result = cached_result
+                            # 코멘트도 DB에서 불러온 값 사용
+                            current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
+                        else:
+                            current_comment = st.session_state.get(session_key_class_comment, "")
+
+                        if current_result:
+                            if not cached_result: # 캐시가 없었는데 새로 생성된 경우
+                                st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
+                                st.info(current_result)
+
+                            st.markdown("---")
+                            st.subheader("✍️ 교사 코멘트 추가 및 저장")
+                            teacher_comment_input = st.text_area(
+                                "분석 결과에 대한 교사 의견 또는 추가 메모:",
+                                value=current_comment,
+                                height=150,
+                                key=f"comment_input_{selected_survey_id}_class_summary"
+                            )
+
+                            if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
+                                # DB에 저장 (Upsert - student_id는 None)
+                                try:
+                                    data_to_save = {
+                                        'survey_instance_id': selected_survey_id,
+                                        'student_id': None, # 학급 전체 요약
+                                        'analysis_type': analysis_type,
+                                        'result_text': current_result,
+                                        'teacher_comment': teacher_comment_input,
+                                        'generated_at': datetime.datetime.now().isoformat()
+                                    }
+                                    upsert_response = supabase.table("ai_analysis_results") \
+                                        .upsert(data_to_save, on_conflict='survey_instance_id, student_id, analysis_type') \
+                                        .execute()
+                                    # ... (upsert 성공/실패 처리) ...
+                                    st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
+                                    st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
+                                    st.rerun()
+
+                                except Exception as db_e:
+                                    st.error(f"DB 저장 중 예외 발생: {db_e}")
                             else:
                                 st.warning("학생을 선택해주세요.")
                     else:
