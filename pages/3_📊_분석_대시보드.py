@@ -625,7 +625,7 @@ if selected_class_id and selected_survey_id:
                 # --- AI 분석 기능 선택 ---
                 analysis_option = st.selectbox(
                     "어떤 내용을 분석하시겠어요?",
-                    ["선택하세요", "학생 고민 전체 요약", "학생별 관계 프로파일 생성", "학급 전체 관계 요약 (준비중)", "주요 키워드 추출 (준비중)"]
+                    ["선택하세요", "학생 고민 전체 요약", "학생별 관계 프로파일 생성", "학급 전체 관계 요약", "주요 키워드 추출 (준비중)"]
                 )
 
                 if analysis_option == "학생 고민 전체 요약":
@@ -882,140 +882,140 @@ if selected_class_id and selected_survey_id:
 
                                         #     except Exception as pdf_e:
                                         #         st.error(f"PDF 다운로드 버튼 생성 중 오류: {pdf_e}")
-                    elif analysis_option == "학급 전체 관계 요약":
-                        st.subheader("학급 전체 관계 요약")
-                        analysis_type = 'class_summary' # 캐시 키로 사용
+                elif analysis_option == "학급 전체 관계 요약":
+                    st.subheader("학급 전체 관계 요약")
+                    analysis_type = 'class_summary' # 캐시 키로 사용
 
-                        # --- 캐시된 결과 조회 (student_id 없이 조회) ---
-                        cached_result = None
-                        generated_time = None
-                        cached_comment = "" # 기본 빈 문자열
-                        try:
-                            cache_response = supabase.table("ai_analysis_results") \
-                                .select("result_text, generated_at") \
-                                .eq("survey_instance_id", selected_survey_id) \
-                                .is_("student_id", None) \
-                                .eq("analysis_type", analysis_type) \
-                                .maybe_single() \
-                                .execute()
-                            # ... (캐시 조회 및 표시 로직 - 이전 답변 참고) ...
-                            if cache_response and cache_response.data:
-                                cached_result = cache_response.data.get("result_text")
-                                generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M')
-                                st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
-                                st.info(cached_result)
+                    # --- 캐시된 결과 조회 (student_id 없이 조회) ---
+                    cached_result = None
+                    generated_time = None
+                    cached_comment = "" # 기본 빈 문자열
+                    try:
+                        cache_response = supabase.table("ai_analysis_results") \
+                            .select("result_text, generated_at") \
+                            .eq("survey_instance_id", selected_survey_id) \
+                            .is_("student_id", None) \
+                            .eq("analysis_type", analysis_type) \
+                            .maybe_single() \
+                            .execute()
+                        # ... (캐시 조회 및 표시 로직 - 이전 답변 참고) ...
+                        if cache_response and cache_response.data:
+                            cached_result = cache_response.data.get("result_text")
+                            generated_time = pd.to_datetime(cache_response.data.get("generated_at")).strftime('%Y-%m-%d %H:%M')
+                            st.caption(f"💾 이전에 분석된 결과입니다. (분석 시각: {generated_time})")
+                            st.info(cached_result)
 
-                        except Exception as e:
-                            st.warning(f"캐시된 분석 결과 조회 중 오류: {e}")
+                    except Exception as e:
+                        st.warning(f"캐시된 분석 결과 조회 중 오류: {e}")
 
-                        # --- 분석 실행 버튼 ---
-                        if st.button("🔄 학급 전체 AI 분석 실행/재실행", key="run_class_summary_ai"):
-                            if not cached_result: st.write("AI 분석을 요청합니다...")
-                            else: st.write("AI 분석을 다시 요청합니다...")
+                    # --- 분석 실행 버튼 ---
+                    if st.button("🔄 학급 전체 AI 분석 실행/재실행", key="run_class_summary_ai"):
+                        if not cached_result: st.write("AI 분석을 요청합니다...")
+                        else: st.write("AI 분석을 다시 요청합니다...")
 
-                            with st.spinner("✨ 학급 전체 관계 데이터를 종합 분석 중입니다..."):
-                                # --- 프롬프트에 넣을 데이터 요약 ---
-                                try:
-                                    # 이전에 계산된 변수들 사용
-                                    prompt_data = {
-                                        "overall_avg": overall_scores_series.mean(),
-                                        "overall_median": overall_scores_series.median(),
-                                        "highest_received": avg_received_df.nlargest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
-                                        "lowest_received": avg_received_df.nsmallest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
-                                        "highest_given": avg_given_df.nlargest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
-                                        "lowest_given": avg_given_df.nsmallest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
-                                        "reciprocity_summary": reciprocity_df['관계 유형'].value_counts().to_dict() if not reciprocity_df.empty else {},
-                                        # 추가 가능: "difficult_mentions": ... (별도 계산 필요)
-                                    }
+                        with st.spinner("✨ 학급 전체 관계 데이터를 종합 분석 중입니다..."):
+                            # --- 프롬프트에 넣을 데이터 요약 ---
+                            try:
+                                # 이전에 계산된 변수들 사용
+                                prompt_data = {
+                                    "overall_avg": overall_scores_series.mean(),
+                                    "overall_median": overall_scores_series.median(),
+                                    "highest_received": avg_received_df.nlargest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                    "lowest_received": avg_received_df.nsmallest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                    "highest_given": avg_given_df.nlargest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                    "lowest_given": avg_given_df.nsmallest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                    "reciprocity_summary": reciprocity_df['관계 유형'].value_counts().to_dict() if not reciprocity_df.empty else {},
+                                    # 추가 가능: "difficult_mentions": ... (별도 계산 필요)
+                                }
 
-                                    # JSON으로 변환하여 프롬프트 가독성 향상 (선택 사항)
-                                    prompt_data_json = json.dumps(prompt_data, ensure_ascii=False, indent=2, default=lambda x: round(x, 1) if isinstance(x, float) else str(x))
-
-
-                                    # --- 프롬프트 구성 ---
-                                    prompt = f"""
-                                    다음은 '{selected_class_name}' 학급의 '{selected_survey_name}' 설문 결과에 대한 요약 데이터입니다:
-                                    ```json
-                                    {prompt_data_json}
-                                    ```
-                                    참고: 점수는 0(매우 어려움) ~ 100(매우 친함) 척도입니다. 'highest/lowest_received'는 다른 학생들에게 받은 평균 점수 기준, 'highest/lowest_given'은 다른 학생들에게 준 평균 점수 기준입니다. 'reciprocity_summary'는 서로 평가한 학생 쌍의 관계 유형별 개수입니다.
-
-                                    위 데이터를 바탕으로 이 학급의 전반적인 교우관계 분위기, 주요 특징, 잠재적인 그룹 형성이나 소외 경향, 긍정적/부정적 상호작용 패턴 등 학급 전체 관계에 대한 종합적인 분석과 해석을 교사가 이해하기 쉽게 한국어로 작성해주세요. 주목해야 할 점이나 교사의 개입이 필요해 보이는 부분을 포함해도 좋습니다. 반드시 학생 이름을 언급할 때는 주어진 데이터에 있는 이름을 사용하세요.
-                                    """
-
-                                    # --- AI 호출 ---
-                                    new_analysis_result = call_gemini(prompt, api_key)
-
-                                    # --- 결과 처리 및 캐시 저장 (student_id = None) ---
-                                    if new_analysis_result and not new_analysis_result.startswith("오류:"):
-                                        st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
-                                        st.info(new_analysis_result)
-
-                                        # --- !!! 수동 저장 방식으로 변경 !!! ---
-                                        st.session_state[f"ai_result_{selected_survey_id}_class_summary"] = new_analysis_result
-                                        st.success("✅ AI 분석 완료! 아래 코멘트와 함께 저장할 수 있습니다.")
-
-                                    else:
-                                        st.error(new_analysis_result or "AI 분석 중 알 수 없는 오류")
-                                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
-                                        if session_key_class_summary in st.session_state:
-                                            del st.session_state[session_key_class_summary]
-
-                                except Exception as e:
-                                    st.error(f"AI 분석 준비/실행 중 오류 발생: {e}")
-                                    traceback.print_exc()
+                                # JSON으로 변환하여 프롬프트 가독성 향상 (선택 사항)
+                                prompt_data_json = json.dumps(prompt_data, ensure_ascii=False, indent=2, default=lambda x: round(x, 1) if isinstance(x, float) else str(x))
 
 
-                        # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
-                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
-                        session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
+                                # --- 프롬프트 구성 ---
+                                prompt = f"""
+                                다음은 '{selected_class_name}' 학급의 '{selected_survey_name}' 설문 결과에 대한 요약 데이터입니다:
+                                ```json
+                                {prompt_data_json}
+                                ```
+                                참고: 점수는 0(매우 어려움) ~ 100(매우 친함) 척도입니다. 'highest/lowest_received'는 다른 학생들에게 받은 평균 점수 기준, 'highest/lowest_given'은 다른 학생들에게 준 평균 점수 기준입니다. 'reciprocity_summary'는 서로 평가한 학생 쌍의 관계 유형별 개수입니다.
 
-                        current_result = st.session_state.get(session_key_class_summary)
-                        # 캐시된 결과가 있고 세션 결과가 없다면 캐시된 것을 보여줌 (페이지 첫 로드시)
-                        if not current_result and cached_result:
-                            current_result = cached_result
-                            # 코멘트도 DB에서 불러온 값 사용
-                            current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
+                                위 데이터를 바탕으로 이 학급의 전반적인 교우관계 분위기, 주요 특징, 잠재적인 그룹 형성이나 소외 경향, 긍정적/부정적 상호작용 패턴 등 학급 전체 관계에 대한 종합적인 분석과 해석을 교사가 이해하기 쉽게 한국어로 작성해주세요. 주목해야 할 점이나 교사의 개입이 필요해 보이는 부분을 포함해도 좋습니다. 반드시 학생 이름을 언급할 때는 주어진 데이터에 있는 이름을 사용하세요.
+                                """
+
+                                # --- AI 호출 ---
+                                new_analysis_result = call_gemini(prompt, api_key)
+
+                                # --- 결과 처리 및 캐시 저장 (student_id = None) ---
+                                if new_analysis_result and not new_analysis_result.startswith("오류:"):
+                                    st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
+                                    st.info(new_analysis_result)
+
+                                    # --- !!! 수동 저장 방식으로 변경 !!! ---
+                                    st.session_state[f"ai_result_{selected_survey_id}_class_summary"] = new_analysis_result
+                                    st.success("✅ AI 분석 완료! 아래 코멘트와 함께 저장할 수 있습니다.")
+
+                                else:
+                                    st.error(new_analysis_result or "AI 분석 중 알 수 없는 오류")
+                                    session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                                    if session_key_class_summary in st.session_state:
+                                        del st.session_state[session_key_class_summary]
+
+                            except Exception as e:
+                                st.error(f"AI 분석 준비/실행 중 오류 발생: {e}")
+                                traceback.print_exc()
+
+
+                    # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
+                    session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                    session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
+
+                    current_result = st.session_state.get(session_key_class_summary)
+                    # 캐시된 결과가 있고 세션 결과가 없다면 캐시된 것을 보여줌 (페이지 첫 로드시)
+                    if not current_result and cached_result:
+                        current_result = cached_result
+                        # 코멘트도 DB에서 불러온 값 사용
+                        current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
+                    else:
+                        current_comment = st.session_state.get(session_key_class_comment, "")
+
+                    if current_result:
+                        if not cached_result: # 캐시가 없었는데 새로 생성된 경우
+                            st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
+                            st.info(current_result)
+
+                        st.markdown("---")
+                        st.subheader("✍️ 교사 코멘트 추가 및 저장")
+                        teacher_comment_input = st.text_area(
+                            "분석 결과에 대한 교사 의견 또는 추가 메모:",
+                            value=current_comment,
+                            height=150,
+                            key=f"comment_input_{selected_survey_id}_class_summary"
+                        )
+
+                        if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
+                            # DB에 저장 (Upsert - student_id는 None)
+                            try:
+                                data_to_save = {
+                                    'survey_instance_id': selected_survey_id,
+                                    'student_id': None, # 학급 전체 요약
+                                    'analysis_type': analysis_type,
+                                    'result_text': current_result,
+                                    'teacher_comment': teacher_comment_input,
+                                    'generated_at': datetime.datetime.now().isoformat()
+                                }
+                                upsert_response = supabase.table("ai_analysis_results") \
+                                    .upsert(data_to_save, on_conflict='survey_instance_id, student_id, analysis_type') \
+                                    .execute()
+                                # ... (upsert 성공/실패 처리) ...
+                                st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
+                                st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
+                                st.rerun()
+
+                            except Exception as db_e:
+                                st.error(f"DB 저장 중 예외 발생: {db_e}")
                         else:
-                            current_comment = st.session_state.get(session_key_class_comment, "")
-
-                        if current_result:
-                            if not cached_result: # 캐시가 없었는데 새로 생성된 경우
-                                st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
-                                st.info(current_result)
-
-                            st.markdown("---")
-                            st.subheader("✍️ 교사 코멘트 추가 및 저장")
-                            teacher_comment_input = st.text_area(
-                                "분석 결과에 대한 교사 의견 또는 추가 메모:",
-                                value=current_comment,
-                                height=150,
-                                key=f"comment_input_{selected_survey_id}_class_summary"
-                            )
-
-                            if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
-                                # DB에 저장 (Upsert - student_id는 None)
-                                try:
-                                    data_to_save = {
-                                        'survey_instance_id': selected_survey_id,
-                                        'student_id': None, # 학급 전체 요약
-                                        'analysis_type': analysis_type,
-                                        'result_text': current_result,
-                                        'teacher_comment': teacher_comment_input,
-                                        'generated_at': datetime.datetime.now().isoformat()
-                                    }
-                                    upsert_response = supabase.table("ai_analysis_results") \
-                                        .upsert(data_to_save, on_conflict='survey_instance_id, student_id, analysis_type') \
-                                        .execute()
-                                    # ... (upsert 성공/실패 처리) ...
-                                    st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
-                                    st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
-                                    st.rerun()
-
-                                except Exception as db_e:
-                                    st.error(f"DB 저장 중 예외 발생: {db_e}")
-                            else:
-                                st.warning("학생을 선택해주세요.")
+                            st.warning("학생을 선택해주세요.")
                     else:
                         st.info("분석할 학생 정보가 없습니다.")
                 elif analysis_option == "학급 전체 관계 요약 (준비중)":
