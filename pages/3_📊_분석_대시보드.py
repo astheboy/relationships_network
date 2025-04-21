@@ -955,7 +955,7 @@ if selected_class_id and selected_survey_id:
                                 # --- 결과 처리 및 캐시 저장 (student_id = None) ---
                                 if new_analysis_result and not new_analysis_result.startswith("오류:"):
                                     st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
-                                    st.info(new_analysis_result)
+                                    # st.info(new_analysis_result)
 
                                     # --- !!! 수동 저장 방식으로 변경 !!! ---
                                     st.session_state[f"ai_result_{selected_survey_id}_class_summary"] = new_analysis_result
