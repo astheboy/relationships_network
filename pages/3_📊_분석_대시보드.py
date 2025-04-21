@@ -186,6 +186,58 @@ def calculate_given_scores(_analysis_df, _students_map, id_col='submitter_id', n
         return pd.DataFrame(columns=['submitter_id', 'submitter_name', 'average_score_given', 'rated_count', 'scores_list'])
     return pd.DataFrame(given_scores_list)
 
+# --- ▼▼▼ [수정 1] analyze_reciprocity 함수 정의를 여기로 이동 ▼▼▼ ---
+@st.cache_data # 계산 결과를 캐싱
+def analyze_reciprocity(df, student_map):
+    # 입력 데이터 유효성 검사
+    if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
+        return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+
+    # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
+    score_lookup = {}
+    for index, row in df.iterrows():
+        submitter_id = row['submitter_id']
+        relations = row.get('parsed_relations', {})
+        if isinstance(relations, dict):
+            for target_id, info in relations.items():
+                if target_id in student_map:
+                    score = info.get('intimacy')
+                    if isinstance(score, (int, float)):
+                        score_lookup[(submitter_id, target_id)] = score
+
+    # 2. 모든 학생 쌍에 대해 상호 점수 확인
+    student_ids = list(student_map.keys())
+    reciprocal_data = []
+    for id_a, id_b in itertools.combinations(student_ids, 2):
+        score_a_to_b = score_lookup.get((id_a, id_b))
+        score_b_to_a = score_lookup.get((id_b, id_a))
+        if score_a_to_b is not None and score_b_to_a is not None:
+            name_a = student_map.get(id_a, "알 수 없음")
+            name_b = student_map.get(id_b, "알 수 없음")
+            reciprocal_data.append({
+                '학생 A': name_a, '학생 B': name_b,
+                'A->B 점수': score_a_to_b, 'B->A 점수': score_b_to_a
+            })
+
+    if not reciprocal_data:
+        return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+
+    reciprocity_df_local = pd.DataFrame(reciprocal_data) # 변수 이름 충돌 방지
+
+    # 3. 관계 유형 분류 함수 정의
+    def categorize_relationship(row, high_threshold=75, low_threshold=35):
+        score_ab = row['A->B 점수']
+        score_ba = row['B->A 점수']
+        # ... (분류 로직) ...
+        if score_ab >= high_threshold and score_ba >= high_threshold: return "✅ 상호 높음"
+        # ... (나머지 분류 로직) ...
+        return "↔️ 혼합/중간"
+
+    reciprocity_df_local['관계 유형'] = reciprocity_df_local.apply(categorize_relationship, axis=1)
+    return reciprocity_df_local # 계산된 DataFrame 반환
+# --- ▲▲▲ [수정 1] 완료 ▲▲▲ ---
+
+
 st.title(f"📊 {teacher_name}의 분석 대시보드")
 st.write("학급과 설문 회차를 선택하여 결과를 분석하고 시각화합니다.")
 
@@ -319,7 +371,7 @@ if selected_class_id and selected_survey_id:
             # 각 함수 호출하여 결과 DataFrame/Series 저장
             avg_received_df = calculate_received_scores(analysis_df, students_map)
             avg_given_df = calculate_given_scores(analysis_df, students_map)
-            # reciprocity_df = analyze_reciprocity(analysis_df, students_map) # analyze_reciprocity 함수가 정의되어 있다면
+            reciprocity_df = analyze_reciprocity(analysis_df, students_map) # analyze_reciprocity 함수가 정의되어 있다면
             # all_scores_list = get_all_scores(analysis_df) # 전체 점수 목록 함수가 정의되어 있다면
             # overall_scores_series = pd.Series(all_scores_list) if all_scores_list else pd.Series(dtype=float)
             
@@ -410,7 +462,14 @@ if selected_class_id and selected_survey_id:
                     scores_dist_df,
                     x='점수',
                     title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
-                    # ... (나머지 히스토그램 코드) ...
+                    labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
+                    nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
+                    range_x=[0, 100] # X축 범위 0-100으로 고정
+                )
+                # 그래프 레이아웃 추가 설정
+                fig_overall_dist.update_layout(
+                    bargap=0.1, # 막대 사이 간격
+                    yaxis_title="응답 빈도수" # Y축 제목
                 )
                 st.plotly_chart(fig_overall_dist, use_container_width=True)
 
@@ -482,82 +541,82 @@ if selected_class_id and selected_survey_id:
             st.markdown("---")        
             st.subheader("관계 상호성 분석 (Reciprocity)")
 
-            # 함수: 상호 평가 점수 계산 및 관계 유형 분류
-            @st.cache_data # 계산 결과를 캐싱
-            def analyze_reciprocity(df, student_map):
-                # 입력 데이터 유효성 검사
-                if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
-                    return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+            # # 함수: 상호 평가 점수 계산 및 관계 유형 분류
+            # @st.cache_data # 계산 결과를 캐싱
+            # def analyze_reciprocity(df, student_map):
+            #     # 입력 데이터 유효성 검사
+            #     if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
+            #         return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
 
-                # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
-                #   Key: (주는학생ID, 받는학생ID), Value: 점수
-                score_lookup = {}
-                for index, row in df.iterrows():
-                    submitter_id = row['submitter_id']
-                    relations = row.get('parsed_relations', {})
-                    if isinstance(relations, dict):
-                        for target_id, info in relations.items():
-                            # target_id가 실제 학급 학생인지 확인 (students_map 사용)
-                            if target_id in student_map:
-                                score = info.get('intimacy')
-                                if isinstance(score, (int, float)):
-                                    score_lookup[(submitter_id, target_id)] = score
+            #     # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
+            #     #   Key: (주는학생ID, 받는학생ID), Value: 점수
+            #     score_lookup = {}
+            #     for index, row in df.iterrows():
+            #         submitter_id = row['submitter_id']
+            #         relations = row.get('parsed_relations', {})
+            #         if isinstance(relations, dict):
+            #             for target_id, info in relations.items():
+            #                 # target_id가 실제 학급 학생인지 확인 (students_map 사용)
+            #                 if target_id in student_map:
+            #                     score = info.get('intimacy')
+            #                     if isinstance(score, (int, float)):
+            #                         score_lookup[(submitter_id, target_id)] = score
 
-                # 2. 모든 학생 쌍에 대해 상호 점수 확인
-                student_ids = list(student_map.keys())
-                reciprocal_data = []
+            #     # 2. 모든 학생 쌍에 대해 상호 점수 확인
+            #     student_ids = list(student_map.keys())
+            #     reciprocal_data = []
 
-                # 모든 가능한 학생 쌍 (A, B) 조합 생성 (itertools 사용)
-                for id_a, id_b in itertools.combinations(student_ids, 2):
-                    # A가 B에게 준 점수 조회
-                    score_a_to_b = score_lookup.get((id_a, id_b))
-                    # B가 A에게 준 점수 조회
-                    score_b_to_a = score_lookup.get((id_b, id_a))
+            #     # 모든 가능한 학생 쌍 (A, B) 조합 생성 (itertools 사용)
+            #     for id_a, id_b in itertools.combinations(student_ids, 2):
+            #         # A가 B에게 준 점수 조회
+            #         score_a_to_b = score_lookup.get((id_a, id_b))
+            #         # B가 A에게 준 점수 조회
+            #         score_b_to_a = score_lookup.get((id_b, id_a))
 
-                    # 둘 다 서로 평가한 경우에만 분석 대상에 포함
-                    if score_a_to_b is not None and score_b_to_a is not None:
-                        name_a = student_map.get(id_a, "알 수 없음")
-                        name_b = student_map.get(id_b, "알 수 없음")
-                        reciprocal_data.append({
-                            '학생 A': name_a,
-                            '학생 B': name_b,
-                            'A->B 점수': score_a_to_b,
-                            'B->A 점수': score_b_to_a
-                        })
+            #         # 둘 다 서로 평가한 경우에만 분석 대상에 포함
+            #         if score_a_to_b is not None and score_b_to_a is not None:
+            #             name_a = student_map.get(id_a, "알 수 없음")
+            #             name_b = student_map.get(id_b, "알 수 없음")
+            #             reciprocal_data.append({
+            #                 '학생 A': name_a,
+            #                 '학생 B': name_b,
+            #                 'A->B 점수': score_a_to_b,
+            #                 'B->A 점수': score_b_to_a
+            #             })
 
-                if not reciprocal_data: # 상호 평가 데이터가 없으면 빈 DataFrame 반환
-                    return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
+            #     if not reciprocal_data: # 상호 평가 데이터가 없으면 빈 DataFrame 반환
+            #         return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
 
-                reciprocity_df = pd.DataFrame(reciprocal_data)
+            #     reciprocity_df = pd.DataFrame(reciprocal_data)
 
-                # 3. 관계 유형 분류 함수 정의
-                def categorize_relationship(row, high_threshold=75, low_threshold=35): # 기준점수 조절 가능
-                    score_ab = row['A->B 점수']
-                    score_ba = row['B->A 점수']
-                    high_a = score_ab >= high_threshold
-                    low_a = score_ab <= low_threshold
-                    high_b = score_ba >= high_threshold
-                    low_b = score_ba <= low_threshold
+            #     # 3. 관계 유형 분류 함수 정의
+            #     def categorize_relationship(row, high_threshold=75, low_threshold=35): # 기준점수 조절 가능
+            #         score_ab = row['A->B 점수']
+            #         score_ba = row['B->A 점수']
+            #         high_a = score_ab >= high_threshold
+            #         low_a = score_ab <= low_threshold
+            #         high_b = score_ba >= high_threshold
+            #         low_b = score_ba <= low_threshold
 
-                    if high_a and high_b: return "✅ 상호 높음"
-                    if low_a and low_b: return "⚠️ 상호 낮음"
-                    if high_a and low_b: return f"↗️ {row['학생 A']} > {row['학생 B']} (일방 높음)"
-                    if low_a and high_b: return f"↖️ {row['학생 B']} > {row['학생 A']} (일방 높음)"
-                    # 필요시 중간 유형 추가 가능
-                    return "↔️ 혼합/중간"
+            #         if high_a and high_b: return "✅ 상호 높음"
+            #         if low_a and low_b: return "⚠️ 상호 낮음"
+            #         if high_a and low_b: return f"↗️ {row['학생 A']} > {row['학생 B']} (일방 높음)"
+            #         if low_a and high_b: return f"↖️ {row['학생 B']} > {row['학생 A']} (일방 높음)"
+            #         # 필요시 중간 유형 추가 가능
+            #         return "↔️ 혼합/중간"
 
-                # DataFrame에 '관계 유형' 컬럼 추가
-                reciprocity_df['관계 유형'] = reciprocity_df.apply(categorize_relationship, axis=1)
-                return reciprocity_df
+            #     # DataFrame에 '관계 유형' 컬럼 추가
+            #     reciprocity_df['관계 유형'] = reciprocity_df.apply(categorize_relationship, axis=1)
+            #     return reciprocity_df
 
             # 상호성 분석 실행
-            reciprocity_results_df = analyze_reciprocity(analysis_df, students_map)
+            # reciprocity_results_df = analyze_reciprocity(analysis_df, students_map)
 
-            if not reciprocity_results_df.empty:
+            if not reciprocity_df.empty:
                 st.write("서로 점수를 매긴 학생 쌍 간의 관계 유형입니다.")
 
                 # 요약 통계: 관계 유형별 개수
-                type_counts = reciprocity_results_df['관계 유형'].value_counts()
+                type_counts = reciprocity_df['관계 유형'].value_counts()
                 st.write("##### 관계 유형별 분포:")
                 st.dataframe(type_counts)
                 # 파이 차트 추가 (선택 사항)
@@ -568,7 +627,7 @@ if selected_class_id and selected_survey_id:
                 # 상세 테이블: 상호 평가 목록
                 st.write("##### 상세 관계 목록:")
                 # 컬럼 순서 및 이름 변경하여 표시 (선택 사항)
-                display_df = reciprocity_results_df[['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형']]
+                display_df = reciprocity_df[['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형']]
                 st.dataframe(display_df, use_container_width=True, hide_index=True)
 
                 # (고급/선택) 네트워크 그래프 시각화
