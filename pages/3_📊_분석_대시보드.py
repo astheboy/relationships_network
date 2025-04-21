@@ -882,6 +882,11 @@ if selected_class_id and selected_survey_id:
 
                                         #     except Exception as pdf_e:
                                         #         st.error(f"PDF 다운로드 버튼 생성 중 오류: {pdf_e}")
+
+                        else:
+                            st.warning("학생을 선택해주세요.")
+                    else:
+                        st.info("분석할 학생 정보가 없습니다.")
                 elif analysis_option == "학급 전체 관계 요약":
                     st.subheader("학급 전체 관계 요약")
                     analysis_type = 'class_summary' # 캐시 키로 사용
@@ -1014,13 +1019,6 @@ if selected_class_id and selected_survey_id:
 
                             except Exception as db_e:
                                 st.error(f"DB 저장 중 예외 발생: {db_e}")
-                        else:
-                            st.warning("학생을 선택해주세요.")
-                    else:
-                        st.info("분석할 학생 정보가 없습니다.")
-                elif analysis_option == "학급 전체 관계 요약 (준비중)":
-                    st.info("감성 분석 기능은 준비 중입니다.")
-                    # 여기에 감성 분석 로직 추가 (difficult_reason 컬럼 사용)
 
                 elif analysis_option == "주요 키워드 추출 (준비중)":
                     st.info("키워드 추출 기능은 준비 중입니다.")
