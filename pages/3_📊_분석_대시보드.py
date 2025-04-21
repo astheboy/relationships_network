@@ -490,127 +490,11 @@ if selected_class_id and selected_survey_id:
             else:
                  st.write("분석할 전체 점수 데이터가 없습니다.")
                  
-            # all_scores_given = [] # 모든 점수를 담을 리스트
-            # # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
-            # # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
-            # for relations in analysis_df['parsed_relations'].dropna():
-            #     # relations가 dict 타입인지, 내용이 있는지 확인
-            #     if isinstance(relations, dict) and relations:
-            #         for info in relations.values():
-            #             score = info.get('intimacy')
-            #             # score가 숫자 타입인지 확인
-            #             if isinstance(score, (int, float)):
-            #                 all_scores_given.append(score)
 
-            # if all_scores_given: # 추출된 점수가 있을 경우
-            #     # 점수 목록으로 DataFrame 생성
-            #     scores_dist_df = pd.DataFrame({'점수': all_scores_given})
-
-            #     # 히스토그램 생성
-            #     fig_overall_dist = px.histogram(
-            #         scores_dist_df,
-            #         x='점수', # X축은 점수
-            #         title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
-            #         labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
-            #         nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
-            #         range_x=[0, 100] # X축 범위 0-100으로 고정
-            #     )
-            #     # 그래프 레이아웃 추가 설정
-            #     fig_overall_dist.update_layout(
-            #         bargap=0.1, # 막대 사이 간격
-            #         yaxis_title="응답 빈도수" # Y축 제목
-            #     )
-            #     st.plotly_chart(fig_overall_dist, use_container_width=True)
-
-            #     # 간단한 통계 정보 추가 (선택 사항)
-            #     try:
-            #         avg_overall = scores_dist_df['점수'].mean()
-            #         median_overall = scores_dist_df['점수'].median()
-            #         stdev_overall = scores_dist_df['점수'].std()
-            #         st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
-            #         st.write(f"**중앙값:** {median_overall:.0f}")
-            #         st.write(f"**표준편차:** {stdev_overall:.1f}")
-            #         st.caption("""
-            #         * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
-            #         * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
-            #         * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
-            #         """)
-            #     except Exception as stat_e:
-            #         st.warning(f"통계 계산 중 오류: {stat_e}")
-            # --- 4. 관계 상호성 분석 (새로 추가) ---
             st.markdown("---")        
             st.subheader("관계 상호성 분석 (Reciprocity)")
 
-            # # 함수: 상호 평가 점수 계산 및 관계 유형 분류
-            # @st.cache_data # 계산 결과를 캐싱
-            # def analyze_reciprocity(df, student_map):
-            #     # 입력 데이터 유효성 검사
-            #     if df.empty or 'parsed_relations' not in df.columns or 'submitter_id' not in df.columns or not student_map:
-            #         return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
 
-            #     # 1. 모든 A->B 점수를 빠르게 조회할 수 있는 딕셔너리 생성
-            #     #   Key: (주는학생ID, 받는학생ID), Value: 점수
-            #     score_lookup = {}
-            #     for index, row in df.iterrows():
-            #         submitter_id = row['submitter_id']
-            #         relations = row.get('parsed_relations', {})
-            #         if isinstance(relations, dict):
-            #             for target_id, info in relations.items():
-            #                 # target_id가 실제 학급 학생인지 확인 (students_map 사용)
-            #                 if target_id in student_map:
-            #                     score = info.get('intimacy')
-            #                     if isinstance(score, (int, float)):
-            #                         score_lookup[(submitter_id, target_id)] = score
-
-            #     # 2. 모든 학생 쌍에 대해 상호 점수 확인
-            #     student_ids = list(student_map.keys())
-            #     reciprocal_data = []
-
-            #     # 모든 가능한 학생 쌍 (A, B) 조합 생성 (itertools 사용)
-            #     for id_a, id_b in itertools.combinations(student_ids, 2):
-            #         # A가 B에게 준 점수 조회
-            #         score_a_to_b = score_lookup.get((id_a, id_b))
-            #         # B가 A에게 준 점수 조회
-            #         score_b_to_a = score_lookup.get((id_b, id_a))
-
-            #         # 둘 다 서로 평가한 경우에만 분석 대상에 포함
-            #         if score_a_to_b is not None and score_b_to_a is not None:
-            #             name_a = student_map.get(id_a, "알 수 없음")
-            #             name_b = student_map.get(id_b, "알 수 없음")
-            #             reciprocal_data.append({
-            #                 '학생 A': name_a,
-            #                 '학생 B': name_b,
-            #                 'A->B 점수': score_a_to_b,
-            #                 'B->A 점수': score_b_to_a
-            #             })
-
-            #     if not reciprocal_data: # 상호 평가 데이터가 없으면 빈 DataFrame 반환
-            #         return pd.DataFrame(columns=['학생 A', '학생 B', 'A->B 점수', 'B->A 점수', '관계 유형'])
-
-            #     reciprocity_df = pd.DataFrame(reciprocal_data)
-
-            #     # 3. 관계 유형 분류 함수 정의
-            #     def categorize_relationship(row, high_threshold=75, low_threshold=35): # 기준점수 조절 가능
-            #         score_ab = row['A->B 점수']
-            #         score_ba = row['B->A 점수']
-            #         high_a = score_ab >= high_threshold
-            #         low_a = score_ab <= low_threshold
-            #         high_b = score_ba >= high_threshold
-            #         low_b = score_ba <= low_threshold
-
-            #         if high_a and high_b: return "✅ 상호 높음"
-            #         if low_a and low_b: return "⚠️ 상호 낮음"
-            #         if high_a and low_b: return f"↗️ {row['학생 A']} > {row['학생 B']} (일방 높음)"
-            #         if low_a and high_b: return f"↖️ {row['학생 B']} > {row['학생 A']} (일방 높음)"
-            #         # 필요시 중간 유형 추가 가능
-            #         return "↔️ 혼합/중간"
-
-            #     # DataFrame에 '관계 유형' 컬럼 추가
-            #     reciprocity_df['관계 유형'] = reciprocity_df.apply(categorize_relationship, axis=1)
-            #     return reciprocity_df
-
-            # 상호성 분석 실행
-            # reciprocity_results_df = analyze_reciprocity(analysis_df, students_map)
 
             if not reciprocity_df.empty:
                 st.write("서로 점수를 매긴 학생 쌍 간의 관계 유형입니다.")
@@ -1088,54 +972,54 @@ if selected_class_id and selected_survey_id:
                                 traceback.print_exc()
 
 
-                    # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
-                    session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
-                    session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
+                        # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
+                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                        session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
 
-                    current_result = st.session_state.get(session_key_class_summary)
-                    # 캐시된 결과가 있고 세션 결과가 없다면 캐시된 것을 보여줌 (페이지 첫 로드시)
-                    if not current_result and cached_result:
-                        current_result = cached_result
-                        # 코멘트도 DB에서 불러온 값 사용
-                        current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
-                    else:
-                        current_comment = st.session_state.get(session_key_class_comment, "")
+                        current_result = st.session_state.get(session_key_class_summary)
+                        # 캐시된 결과가 있고 세션 결과가 없다면 캐시된 것을 보여줌 (페이지 첫 로드시)
+                        if not current_result and cached_result:
+                            current_result = cached_result
+                            # 코멘트도 DB에서 불러온 값 사용
+                            current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
+                        else:
+                            current_comment = st.session_state.get(session_key_class_comment, "")
 
-                    if current_result:
-                        if not cached_result: # 캐시가 없었는데 새로 생성된 경우
-                            st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
-                            st.info(current_result)
+                        if current_result:
+                            if not cached_result: # 캐시가 없었는데 새로 생성된 경우
+                                st.markdown("#### 학급 전체 관계 요약 (AI 분석 결과):")
+                                st.info(current_result)
 
-                        st.markdown("---")
-                        st.subheader("✍️ 교사 코멘트 추가 및 저장")
-                        teacher_comment_input = st.text_area(
-                            "분석 결과에 대한 교사 의견 또는 추가 메모:",
-                            value=current_comment,
-                            height=150,
-                            key=f"comment_input_{selected_survey_id}_class_summary"
-                        )
+                            st.markdown("---")
+                            st.subheader("✍️ 교사 코멘트 추가 및 저장")
+                            teacher_comment_input = st.text_area(
+                                "분석 결과에 대한 교사 의견 또는 추가 메모:",
+                                value=current_comment,
+                                height=150,
+                                key=f"comment_input_{selected_survey_id}_class_summary"
+                            )
 
-                        if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
-                            # DB에 저장 (Upsert - student_id는 None)
-                            try:
-                                data_to_save = {
-                                    'survey_instance_id': selected_survey_id,
-                                    'student_id': None, # 학급 전체 요약
-                                    'analysis_type': analysis_type,
-                                    'result_text': current_result,
-                                    'teacher_comment': teacher_comment_input,
-                                    'generated_at': datetime.datetime.now().isoformat()
-                                }
-                                upsert_response = supabase.table("ai_analysis_results") \
-                                    .upsert(data_to_save, on_conflict='survey_instance_id, student_id, analysis_type') \
-                                    .execute()
-                                # ... (upsert 성공/실패 처리) ...
-                                st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
-                                st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
-                                st.rerun()
+                            if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
+                                # DB에 저장 (Upsert - student_id는 None)
+                                try:
+                                    data_to_save = {
+                                        'survey_instance_id': selected_survey_id,
+                                        'student_id': None, # 학급 전체 요약
+                                        'analysis_type': analysis_type,
+                                        'result_text': current_result,
+                                        'teacher_comment': teacher_comment_input,
+                                        'generated_at': datetime.datetime.now().isoformat()
+                                    }
+                                    upsert_response = supabase.table("ai_analysis_results") \
+                                        .upsert(data_to_save, on_conflict='survey_instance_id, student_id, analysis_type') \
+                                        .execute()
+                                    # ... (upsert 성공/실패 처리) ...
+                                    st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
+                                    st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
+                                    st.rerun()
 
-                            except Exception as db_e:
-                                st.error(f"DB 저장 중 예외 발생: {db_e}")
+                                except Exception as db_e:
+                                    st.error(f"DB 저장 중 예외 발생: {db_e}")
 
                 elif analysis_option == "주요 키워드 추출 (준비중)":
                     st.info("키워드 추출 기능은 준비 중입니다.")
