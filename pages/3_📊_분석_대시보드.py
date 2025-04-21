@@ -322,7 +322,21 @@ if selected_class_id and selected_survey_id:
             # reciprocity_df = analyze_reciprocity(analysis_df, students_map) # analyze_reciprocity 함수가 정의되어 있다면
             # all_scores_list = get_all_scores(analysis_df) # 전체 점수 목록 함수가 정의되어 있다면
             # overall_scores_series = pd.Series(all_scores_list) if all_scores_list else pd.Series(dtype=float)
+            
+            # --- ▼▼▼ [수정 1] 전체 점수 목록 계산 및 Series 생성 ▼▼▼ ---
+            all_scores_given = [] # 모든 점수를 담을 리스트 초기화
+            # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
+            for relations in analysis_df['parsed_relations'].dropna():
+                if isinstance(relations, dict) and relations:
+                    for info in relations.values():
+                        score = info.get('intimacy')
+                        if isinstance(score, (int, float)):
+                            all_scores_given.append(score)
 
+            # Pandas Series 생성 (비어있을 경우 빈 Series 생성)
+            overall_scores_series = pd.Series(all_scores_given, dtype=float) if all_scores_given else pd.Series(dtype=float)
+            # --- ▲▲▲ [수정 1] 완료 ▲▲▲ ---
+            
             st.success("✅ 기본 분석 데이터 준비 완료.") # 계산 완료 알림
 
         except Exception as calc_e:
@@ -386,54 +400,84 @@ if selected_class_id and selected_survey_id:
 
             # --- 3. 학급 전체 친밀도 점수 분포 (새로 추가) ---
             st.subheader("학급 전체 친밀도 점수 분포")
-
-            all_scores_given = [] # 모든 점수를 담을 리스트
-            # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
-            # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
-            for relations in analysis_df['parsed_relations'].dropna():
-                # relations가 dict 타입인지, 내용이 있는지 확인
-                if isinstance(relations, dict) and relations:
-                    for info in relations.values():
-                        score = info.get('intimacy')
-                        # score가 숫자 타입인지 확인
-                        if isinstance(score, (int, float)):
-                            all_scores_given.append(score)
-
-            if all_scores_given: # 추출된 점수가 있을 경우
-                # 점수 목록으로 DataFrame 생성
+            # --- ▼▼▼ [수정 2] 미리 계산된 all_scores_given 사용 ▼▼▼ ---
+            if all_scores_given: # 추출된 점수가 있을 경우 (리스트 사용)
+                # 점수 목록으로 DataFrame 생성 (히스토그램용)
                 scores_dist_df = pd.DataFrame({'점수': all_scores_given})
 
-                # 히스토그램 생성
+                # 히스토그램 생성 (이하 로직 동일)
                 fig_overall_dist = px.histogram(
                     scores_dist_df,
-                    x='점수', # X축은 점수
+                    x='점수',
                     title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
-                    labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
-                    nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
-                    range_x=[0, 100] # X축 범위 0-100으로 고정
-                )
-                # 그래프 레이아웃 추가 설정
-                fig_overall_dist.update_layout(
-                    bargap=0.1, # 막대 사이 간격
-                    yaxis_title="응답 빈도수" # Y축 제목
+                    # ... (나머지 히스토그램 코드) ...
                 )
                 st.plotly_chart(fig_overall_dist, use_container_width=True)
 
-                # 간단한 통계 정보 추가 (선택 사항)
+                # 통계 정보 표시 (이제 overall_scores_series 사용 가능)
                 try:
-                    avg_overall = scores_dist_df['점수'].mean()
-                    median_overall = scores_dist_df['점수'].median()
-                    stdev_overall = scores_dist_df['점수'].std()
-                    st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
-                    st.write(f"**중앙값:** {median_overall:.0f}")
-                    st.write(f"**표준편차:** {stdev_overall:.1f}")
-                    st.caption("""
-                    * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
-                    * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
-                    * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
-                    """)
+                    if not overall_scores_series.empty: # Series가 비어있지 않은지 확인
+                        avg_overall = overall_scores_series.mean()
+                        median_overall = overall_scores_series.median()
+                        stdev_overall = overall_scores_series.std()
+                        st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
+                        st.write(f"**중앙값:** {median_overall:.0f}")
+                        st.write(f"**표준편차:** {stdev_overall:.1f}")
+                    else:
+                        st.write("전체 점수 데이터가 없어 통계를 계산할 수 없습니다.")
+                    # ... (캡션 등) ...
                 except Exception as stat_e:
                     st.warning(f"통계 계산 중 오류: {stat_e}")
+            else:
+                 st.write("분석할 전체 점수 데이터가 없습니다.")
+                 
+            # all_scores_given = [] # 모든 점수를 담을 리스트
+            # # analysis_df의 'parsed_relations' 컬럼을 순회하며 모든 점수 추출
+            # # dropna()를 사용하여 'parsed_relations'가 비어있는 행은 제외
+            # for relations in analysis_df['parsed_relations'].dropna():
+            #     # relations가 dict 타입인지, 내용이 있는지 확인
+            #     if isinstance(relations, dict) and relations:
+            #         for info in relations.values():
+            #             score = info.get('intimacy')
+            #             # score가 숫자 타입인지 확인
+            #             if isinstance(score, (int, float)):
+            #                 all_scores_given.append(score)
+
+            # if all_scores_given: # 추출된 점수가 있을 경우
+            #     # 점수 목록으로 DataFrame 생성
+            #     scores_dist_df = pd.DataFrame({'점수': all_scores_given})
+
+            #     # 히스토그램 생성
+            #     fig_overall_dist = px.histogram(
+            #         scores_dist_df,
+            #         x='점수', # X축은 점수
+            #         title="학급 전체에서 학생들이 매긴 '친밀도 점수' 분포",
+            #         labels={'점수': '친밀도 점수 (0: 매우 어려움 ~ 100: 매우 친함)'},
+            #         nbins=20, # 막대의 개수 (20개 구간으로 나눔, 조절 가능)
+            #         range_x=[0, 100] # X축 범위 0-100으로 고정
+            #     )
+            #     # 그래프 레이아웃 추가 설정
+            #     fig_overall_dist.update_layout(
+            #         bargap=0.1, # 막대 사이 간격
+            #         yaxis_title="응답 빈도수" # Y축 제목
+            #     )
+            #     st.plotly_chart(fig_overall_dist, use_container_width=True)
+
+            #     # 간단한 통계 정보 추가 (선택 사항)
+            #     try:
+            #         avg_overall = scores_dist_df['점수'].mean()
+            #         median_overall = scores_dist_df['점수'].median()
+            #         stdev_overall = scores_dist_df['점수'].std()
+            #         st.write(f"**전체 평균 점수:** {avg_overall:.1f}")
+            #         st.write(f"**중앙값:** {median_overall:.0f}")
+            #         st.write(f"**표준편차:** {stdev_overall:.1f}")
+            #         st.caption("""
+            #         * 히스토그램은 학생들이 다른 친구들에게 매긴 모든 점수들이 어떤 구간에 얼마나 분포하는지를 보여줍니다.
+            #         * 막대가 높을수록 해당 점수 구간을 선택한 응답이 많다는 의미입니다.
+            #         * 분포가 왼쪽(낮은 점수) 또는 오른쪽(높은 점수)으로 치우쳐 있는지, 혹은 넓게 퍼져있는지(표준편차) 등을 통해 학급의 전반적인 관계 분위기를 파악할 수 있습니다.
+            #         """)
+            #     except Exception as stat_e:
+            #         st.warning(f"통계 계산 중 오류: {stat_e}")
             # --- 4. 관계 상호성 분석 (새로 추가) ---
             st.markdown("---")        
             st.subheader("관계 상호성 분석 (Reciprocity)")
@@ -632,7 +676,7 @@ if selected_class_id and selected_survey_id:
                     st.subheader("학생 고민 전체 요약")
                     # analysis_df에 'concern' 컬럼이 있는지, 데이터가 있는지 확인
                     if 'concern' in analysis_df.columns and not analysis_df['concern'].isnull().all():
-                                                # --- !!! 여기!!! all_concerns 변수 정의 추가 !!! ---
+                        # --- !!! 여기!!! all_concerns 변수 정의 추가 !!! ---
                         # 'concern' 컬럼에서 실제 내용이 있는 텍스트만 추출 (None, 빈 문자열, "없다", "없음" 제외)
                         valid_concerns = []
                         for item in analysis_df['concern']:
@@ -921,18 +965,32 @@ if selected_class_id and selected_survey_id:
                         with st.spinner("✨ 학급 전체 관계 데이터를 종합 분석 중입니다..."):
                             # --- 프롬프트에 넣을 데이터 요약 ---
                             try:
-                                # 이전에 계산된 변수들 사용
-                                prompt_data = {
-                                    "overall_avg": overall_scores_series.mean(),
-                                    "overall_median": overall_scores_series.median(),
-                                    "highest_received": avg_received_df.nlargest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
-                                    "lowest_received": avg_received_df.nsmallest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
-                                    "highest_given": avg_given_df.nlargest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
-                                    "lowest_given": avg_given_df.nsmallest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
-                                    "reciprocity_summary": reciprocity_df['관계 유형'].value_counts().to_dict() if not reciprocity_df.empty else {},
-                                    # 추가 가능: "difficult_mentions": ... (별도 계산 필요)
-                                }
-
+                                # --- ▼▼▼ [수정 확인] 이제 overall_scores_series가 정의되어 있음 ▼▼▼ ---
+                                if not overall_scores_series.empty: # Series가 비어있지 않을 때만 통계 계산
+                                    prompt_data = {
+                                        "overall_avg": overall_scores_series.mean(),
+                                        "overall_median": overall_scores_series.median(),
+                                        "overall_std": overall_scores_series.std(), # 표준편차도 추가 가능
+                                        # --- avg_received_df, avg_given_df, reciprocity_df가 정의되었는지 확인 후 사용 ---
+                                        "highest_received": avg_received_df.nlargest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                        "lowest_received": avg_received_df.nsmallest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                        "highest_given": avg_given_df.nlargest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                        "lowest_given": avg_given_df.nsmallest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                        "reciprocity_summary": reciprocity_df['관계 유형'].value_counts().to_dict() if '관계 유형' in reciprocity_df.columns and not reciprocity_df.empty else {},
+                                    }
+                                else:
+                                    # overall_scores_series가 비어있을 경우의 데이터 (평균/중앙값 등 제외)
+                                     prompt_data = {
+                                        "overall_avg": "데이터 없음",
+                                        "overall_median": "데이터 없음",
+                                        "overall_std": "데이터 없음",
+                                        "highest_received": avg_received_df.nlargest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                        "lowest_received": avg_received_df.nsmallest(3, 'average_score')[['student_name', 'average_score']].to_dict('records') if not avg_received_df.empty else [],
+                                        "highest_given": avg_given_df.nlargest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                        "lowest_given": avg_given_df.nsmallest(3, 'average_score_given')[['submitter_name', 'average_score_given']].to_dict('records') if not avg_given_df.empty else [],
+                                        "reciprocity_summary": reciprocity_df['관계 유형'].value_counts().to_dict() if '관계 유형' in reciprocity_df.columns and not reciprocity_df.empty else {},
+                                    }
+                                # --- ▲▲▲ [수정 확인] 완료 ▲▲▲ ---
                                 # JSON으로 변환하여 프롬프트 가독성 향상 (선택 사항)
                                 prompt_data_json = json.dumps(prompt_data, ensure_ascii=False, indent=2, default=lambda x: round(x, 1) if isinstance(x, float) else str(x))
 
