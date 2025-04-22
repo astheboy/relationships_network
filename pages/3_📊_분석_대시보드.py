@@ -972,18 +972,18 @@ if selected_class_id and selected_survey_id:
                                 traceback.print_exc()
 
 
-                        # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
-                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
-                        session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
+                        # # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
+                        # session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                        # session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
 
                         current_result = st.session_state.get(session_key_class_summary)
                         # 캐시된 결과가 있고 세션 결과가 없다면 캐시된 것을 보여줌 (페이지 첫 로드시)
                         if not current_result and cached_result:
                             current_result = cached_result
                             # 코멘트도 DB에서 불러온 값 사용
-                            current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
-                        else:
-                            current_comment = st.session_state.get(session_key_class_comment, "")
+                            # current_comment = cached_comment # DB 조회 로직에서 cached_comment 설정 필요
+                        # else:
+                        #     current_comment = st.session_state.get(session_key_class_comment, "")
 
                         if current_result:
                             if not cached_result: # 캐시가 없었는데 새로 생성된 경우
@@ -991,13 +991,13 @@ if selected_class_id and selected_survey_id:
                                 st.info(current_result)
 
                             st.markdown("---")
-                            st.subheader("✍️ 교사 코멘트 추가 및 저장")
-                            teacher_comment_input = st.text_area(
-                                "분석 결과에 대한 교사 의견 또는 추가 메모:",
-                                value=current_comment,
-                                height=150,
-                                key=f"comment_input_{selected_survey_id}_class_summary"
-                            )
+                            # st.subheader("✍️ 교사 코멘트 추가 및 저장")
+                            # teacher_comment_input = st.text_area(
+                            #     "분석 결과에 대한 교사 의견 또는 추가 메모:",
+                            #     value=current_comment,
+                            #     height=150,
+                            #     key=f"comment_input_{selected_survey_id}_class_summary"
+                            # )
 
                             if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
                                 # DB에 저장 (Upsert - student_id는 None)
@@ -1007,7 +1007,7 @@ if selected_class_id and selected_survey_id:
                                         'student_id': None, # 학급 전체 요약
                                         'analysis_type': analysis_type,
                                         'result_text': current_result,
-                                        'teacher_comment': teacher_comment_input,
+                                        # 'teacher_comment': teacher_comment_input,
                                         'generated_at': datetime.datetime.now().isoformat()
                                     }
                                     upsert_response = supabase.table("ai_analysis_results") \
@@ -1018,7 +1018,7 @@ if selected_class_id and selected_survey_id:
                                     # elif hasattr(upsert_response, 'status_code') and upsert_response.status_code in [200, 201, 204]: # 성공 상태 코드 확인 (라이브러리 버전에 따라 다를 수 있음)
                                     elif not (hasattr(upsert_response, 'error') and upsert_response.error): # 간단하게 error 속성이 없거나 비어있으면 성공으로 간주
                                         st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
-                                        st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
+                                        # st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
                                         st.rerun()
 
                                 except Exception as db_e:
