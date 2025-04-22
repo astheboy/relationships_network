@@ -999,7 +999,7 @@ if selected_class_id and selected_survey_id:
                             #     key=f"comment_input_{selected_survey_id}_class_summary"
                             # )
 
-                            if st.button("💾 분석 결과 및 코멘트 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
+                            if st.button("💾 분석 결과 저장하기", key=f"save_ai_{selected_survey_id}_class_summary"):
                                 # DB에 저장 (Upsert - student_id는 None)
                                 try:
                                     data_to_save = {
@@ -1016,8 +1016,8 @@ if selected_class_id and selected_survey_id:
                                     if hasattr(upsert_response, 'error') and upsert_response.error:
                                         st.error(f"DB 저장 실패 (Supabase 오류): {upsert_response.error}")
                                     # elif hasattr(upsert_response, 'status_code') and upsert_response.status_code in [200, 201, 204]: # 성공 상태 코드 확인 (라이브러리 버전에 따라 다를 수 있음)
-                                    elif not (hasattr(upsert_response, 'error') and upsert_response.error): # 간단하게 error 속성이 없거나 비어있으면 성공으로 간주
-                                        st.success("✅ 분석 결과와 코멘트가 데이터베이스에 저장되었습니다.")
+                                    else : # 간단하게 error 속성이 없거나 비어있으면 성공으로 간주
+                                        st.success("✅ 분석 결과가 데이터베이스에 저장되었습니다.")
                                         # st.session_state[session_key_class_comment] = teacher_comment_input # 세션 코멘트도 업데이트
                                         st.rerun()
 
