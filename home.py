@@ -289,7 +289,7 @@ def render_home_page():
                 submitted = st.form_submit_button("로그인")
                 if submitted:
                     check_login(username, password) # check_login 호출
-            st.info("관리자에게 계정 생성을 요청하세요.")
+            # st.info("관리자에게 계정 생성을 요청하세요.")
         with signup_tab:
             st.subheader("회원가입")
             with st.form("signup_form", clear_on_submit=True):

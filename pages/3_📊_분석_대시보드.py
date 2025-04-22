@@ -973,7 +973,7 @@ if selected_class_id and selected_survey_id:
 
 
                         # # --- 결과 표시 및 수동 저장 UI (학생 프로파일과 유사하게) ---
-                        # session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
+                        session_key_class_summary = f"ai_result_{selected_survey_id}_class_summary"
                         # session_key_class_comment = f"ai_comment_{selected_survey_id}_class_summary"
 
                         current_result = st.session_state.get(session_key_class_summary)
